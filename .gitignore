@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environments (never commit a venv or an isolated notebook environment)
+.venv/
+venv/
+dimer_isolated_env*/
+.env
+.env.local
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Model / data caches (never commit weights or credentials)
+.hf_cache/
+.cache/
+weights/**/*.safetensors
+weights/**/*.ckpt
+weights/**/*.bin
+weights/**/*.pt
+weights/**/*.pth
+weights/**/*.onnx
+weights/**/.cache/
+weights/**/resolved-revision.json
+weights/**/README.md
+weights/**/config.json
+weights/**/.gitattributes
+
+# Tutorial / runtime outputs
+outputs/
+*.executed.ipynb
+
+# Credentials
+*.token
+.huggingface/
+
+# OS
+.DS_Store
+Thumbs.db

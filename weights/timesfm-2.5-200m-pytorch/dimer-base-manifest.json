@@ -1,0 +1,35 @@
+{
+  "format": "dimer_hf_snapshot",
+  "formatVersion": 1,
+  "modelKey": "timesfm-2.5-200m-pytorch",
+  "modelId": "google/timesfm-2.5-200m-pytorch",
+  "revision": "main",
+  "revisionStatus": "unresolved: revision digest to be confirmed on the first hosted run",
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 475,
+      "sha256": "cd3315b760d5cc7e278d7afdf41b897031ced888fc6c115bd9b3ac0ea2c47408"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 925181104,
+      "sha256": "pending: to be confirmed on the first hosted run",
+      "status": "not a digest: the SHA-256 is to be confirmed on the first hosted run; byte size verified against the Hub listing"
+    }
+  ],
+  "totalBytes": 925181579,
+  "verification": {
+    "date": "2026-10-05",
+    "method": "Hub file listing and file contents read through the Hugging Face connector; the Hub itself was not reachable from the build environment, so no commit SHA and no LFS digest could be resolved",
+    "verified": [
+      "file names and byte sizes of config.json (475) and model.safetensors (925181104)",
+      "config.json SHA-256 computed from its full Hub-served text (475 bytes, no trailing newline)",
+      "model card front matter license: apache-2.0"
+    ],
+    "pending": [
+      "immutable commit SHA of the checkpoint (MODEL_REVISION, manifest.revision)",
+      "model.safetensors SHA-256"
+    ]
+  }
+}
