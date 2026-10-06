@@ -51,7 +51,8 @@ jobs:
         run: uv run python tools/build_notebook.py --check
 
       - name: Lock resolves (dry run, hashes required, wheels only)
-        run: uv pip install --dry-run --python 3.12 --python-platform x86_64-manylinux_2_28 --require-hashes --only-binary :all: -r tutorials/requirements-colab.lock.txt
+        # Quoted: the `:all:` token followed by a space is a YAML mapping separator in a plain scalar.
+        run: "uv pip install --dry-run --python 3.12 --python-platform x86_64-manylinux_2_28 --require-hashes --only-binary :all: -r tutorials/requirements-colab.lock.txt"
 
   release-evidence-boundary:
     runs-on: ubuntu-latest
