@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 
@@ -17,7 +18,17 @@ def _source(cell: dict) -> str:
     raise TypeError(f"unsupported notebook cell source type: {type(source).__name__}")
 
 
-def execute_notebook(path: Path, *, workdir: Path | None = None) -> None:
+def execute_notebook(
+    path: Path,
+    *,
+    workdir: Path | None = None,
+    after_cell: Callable[[int, dict], None] | None = None,
+) -> None:
+    """Run every code cell in order. ``after_cell(index, namespace)`` runs after each executed cell.
+
+    The hook exists for the stand-in test, which has to substitute a placeholder for a file the carried
+    module cell defines (the weight digest of a sparse stand-in); the CI integration path passes none.
+    """
     resolved = path.resolve()
     notebook = json.loads(resolved.read_text(encoding="utf-8"))
     namespace = {
@@ -40,6 +51,8 @@ def execute_notebook(path: Path, *, workdir: Path | None = None) -> None:
             # fail compilation instead of being skipped or matched inside strings.
             code = compile(source, f"{resolved}:cell-{index}", "exec")
             exec(code, namespace, namespace)
+            if after_cell is not None:
+                after_cell(index, namespace)
     finally:
         os.chdir(old_cwd)
 

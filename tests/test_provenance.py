@@ -53,7 +53,7 @@ def test_bundle_round_trip_and_parity(tmp_path: Path) -> None:
     parity = check_reload_parity(result.forecast, reloaded)
     assert parity["ok"] and parity["rows"] == 12 and parity["problems"] == []
     prov = json.loads(Path(paths["provenance_json"]).read_text(encoding="utf-8"))
-    assert prov["model"]["revision_status"].startswith("unresolved")
+    assert prov["model"]["revision_status"].startswith("pinned")
     assert prov["notebook_source"] == {"x": 1}
 
 

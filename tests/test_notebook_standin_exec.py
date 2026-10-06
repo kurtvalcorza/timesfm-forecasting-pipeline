@@ -1,10 +1,12 @@
 """Execute the notebook's own code cells sequentially against stand-in modules.
 
 STAND-IN EVIDENCE ONLY. ``torch`` and ``timesfm`` are replaced by deterministic stubs and the weight file
-is a sparse placeholder of the pinned size, so this proves that every cell runs in order, that the data
+is a sparse placeholder of the pinned size whose digest is substituted by ``standin_sha256_file`` after
+the carried module cell defines the real one, so this proves that every cell runs in order, that the data
 contract, evaluation, activity, export and reload-parity stages work, and that the outputs have the
-declared shape. It is not pretrained-model inference and not clean-runtime execution evidence
-(docs/release-verification.md).
+declared shape. It is not pretrained-model inference, not a digest verification of the checkpoint, and not
+clean-runtime execution evidence (docs/release-verification.md). The real digest check is covered by
+``tests/test_model.py``.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from .conftest import ROOT, SAMPLE, install_standin_modules, stage_standin_weights
+from .conftest import ROOT, SAMPLE, install_standin_modules, stage_standin_weights, standin_sha256_file
 
 NOTEBOOK = ROOT / "tutorials" / "timesfm_forecasting_colab.ipynb"
 
@@ -44,7 +46,14 @@ def test_notebook_cells_run_end_to_end_against_standins(workdir: Path, monkeypat
     monkeypatch.setenv("DIMER_NOTEBOOK_CI_PREINSTALLED", "1")
     monkeypatch.setenv("MPLBACKEND", "Agg")
     install_standin_modules(monkeypatch)
-    _runner().execute_notebook(NOTEBOOK, workdir=workdir)
+
+    def substitute_digest(_index: int, namespace: dict) -> None:
+        # The carried model.py cell defines sha256_file in the shared namespace; verify_snapshot looks it up
+        # there at call time. Only the sparse placeholder's digest is substituted (see conftest).
+        if "sha256_file" in namespace and namespace["sha256_file"] is not standin_sha256_file:
+            namespace["sha256_file"] = standin_sha256_file
+
+    _runner().execute_notebook(NOTEBOOK, workdir=workdir, after_cell=substitute_digest)
 
     outputs = workdir / "outputs"
     names = sorted(os.listdir(outputs))
@@ -65,7 +74,10 @@ def test_notebook_cells_run_end_to_end_against_standins(workdir: Path, monkeypat
     assert result["model"]["model_id"] == "google/timesfm-3.0-pytorch"
     assert result["model"]["license"] == "timesfm-non-commercial-license-v1.0"
     assert "non-production" in result["model"]["license_terms"]
-    assert result["model"]["weights_sha256_verified_against_manifest"] is False  # pending, honestly reported
+    # stand-in: the placeholder's substituted digest equals the pinned one, so the flag is True here; it says
+    # nothing about the checkpoint (tests/test_model.py exercises the real check)
+    assert result["model"]["weights_sha256_verified_against_manifest"] is True
+    assert result["model"]["revision"] == "43046b85ec22d584a13f8098c2ed39c889e129c2"
     assert result["provenance_summary"]["runtime"]["torch"] is None  # stand-in: torch is not an installed distribution
     forecast = pd.read_csv(outputs / "timesfm_forecasting_forecast.csv")
     assert list(forecast.columns) == ["series_id", "timestamp", "step", "prediction", "q0.1", "q0.5", "q0.9"]

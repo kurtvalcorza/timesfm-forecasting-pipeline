@@ -1,6 +1,6 @@
 # Release status
 
-Current status: **Candidate — default path passed one hosted Colab run (2026-10-06, `86f2213`); BYOD, an export re-run and a repeated Run all are pending; checkpoint commit and weight digest observed on that run, to be pinned.**
+Current status: **Candidate — default path passed one hosted Colab run (2026-10-06, `86f2213`); BYOD, an export re-run and a repeated Run all are pending; the checkpoint commit and weight digest observed on that run are pinned, and the next hosted run re-verifies them.**
 
 ```yaml
 status: Candidate
@@ -12,9 +12,10 @@ notebook_mode: GUIDED
 notebook_spec: "2.2"
 generator: build_notebook.py/2.2
 model_id: google/timesfm-3.0-pytorch
-model_revision: main
-model_revision_status: "unresolved: revision digest to be confirmed on the first hosted run"
-weights_sha256: pending
+model_revision: 43046b85ec22d584a13f8098c2ed39c889e129c2
+model_revision_status: "pinned: the commit the Hub served for ref main on the 2026-10-06 hosted run (86f2213); the run predates the pin"
+weights_sha256: a7592b0a8432baee54483254e5647856911ce69e09d09a9bb65904b2d98f17da
+weights_sha256_source: "computed in-run over the staged 1,322,898,824-byte file on the 2026-10-06 hosted run; re-verified by the next hosted run on the pinned head"
 weights_license: timesfm-non-commercial-license-v1.0
 weights_license_restriction: "non-commercial and non-production use only; no redistribution of the model or derivatives"
 code_license: Apache-2.0
@@ -51,8 +52,8 @@ fallback.
 | `google/timesfm-3.0-pytorch`: files `.gitattributes` (1,519 B), `LICENSE` (7,270 B), `README.md` (1,436 B), `config.json` (1,273 B), `model.safetensors` (1,322,898,824 B, LFS); licence `other` / `timesfm-non-commercial-license-v1.0`; Hub overview 330.7M parameters, last updated 2026-09-02 | verified (Hub listing, file contents and overview through the Hub connector, 2026-10-06) |
 | `config.json` SHA-256 `ff17bbc0…` | computed from the Hub-served text (1,273 bytes, equal to the listed size) |
 | Architecture: input patch 32, output patch 64, nine quantiles 0.1..0.9, 20 layers, model dims 1280, 16 heads, `use_rope_var: false`, variate attention, iterative CPM RevIN, linear detrending, stitching | verified (`config.json` text) |
-| Immutable commit of the checkpoint | **pending** — the Hub's commit API was not reachable from the build host; `MODEL_REVISION = "main"` with `MODEL_REVISION_STATUS`; the first hosted run writes `resolved-revision.json` |
-| `model.safetensors` SHA-256 | **pending** — manifest carries the `pending:` sentinel; `verify_snapshot` reports the observed digest as unverified |
+| Immutable commit of the checkpoint `43046b85ec22…` | pinned (`MODEL_REVISION`, manifest `revision`) from the commit the Hub served for ref `main` on the 2026-10-06 hosted run of `86f2213` (`resolved_revision` in the evidence notebook); `stage_missing_files` refuses a snapshot for which the Hub reports another commit |
+| `model.safetensors` SHA-256 `a7592b0a…` | pinned in the manifest from the digest `verify_snapshot` computed in-run on the same hosted run (then reported as `verified_against_manifest: False` against the pending sentinel); `verify_snapshot` now refuses any mismatch. That run predates the pin, so the next hosted run on the pinned head is what re-verifies it |
 | `date_published` 2026-09-02 for the checkpoint | the Hub's last-updated date of the repository as shown by the connector; the commit history could not be read, so the maintainer confirms it (`MODEL_CARD.md` records the basis) |
 | Sample `openmeteo_ph_hourly_temperature.csv`, 31,275 B, SHA-256 `74163ee6…`, fetched from this repository's committed copy at commit `e47259ae…` | verified (committed copy hashed; the raw URL is checked after the branch is pushed) |
 | TimesFM 2.5 fallback build (Apache-2.0 weights) at commit `e47259ae…` | verified (repository history) |
@@ -61,8 +62,8 @@ fallback.
 
 1. Run the notebook top-to-bottom on a fresh hosted runtime (`Run all`, defaults), record it in
    `docs/release-verification.md` and as a verification record in `MODEL_CARD.md`.
-2. From that run, pin `MODEL_REVISION` (the commit in `resolved-revision.json`) and the `model.safetensors`
-   digest in `model.py` and the manifest; remove the `revision_pending` template key; regenerate.
+2. Run the notebook once more on a fresh hosted runtime from the pinned head so that the pinned commit and
+   weight digest are verified by `verify_snapshot` in-run (the `86f2213` run predates the pin).
 3. Record the BYOD positive and negative runs on the hosted runtime.
 4. Confirm `date_published` for the 3.0 checkpoint from the Hub commit history.
 5. Decide whether the non-commercial, non-production weights licence fits the intended use; otherwise fall

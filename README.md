@@ -22,11 +22,12 @@ See [MODEL_CARD.md](MODEL_CARD.md) for capabilities, limits, supply-chain pins a
 
 ## Status
 
-**Candidate** — verification pending; no hosted run recorded; `clean_runtime_evidence: false`. See
+**Candidate** — the default path passed one maintainer Colab run (2026-10-06, `86f2213`); BYOD, an
+export re-run and a repeated Run all are still to be exercised; `clean_runtime_evidence: false`. See
 [STATUS.md](STATUS.md) and [docs/release-verification.md](docs/release-verification.md). The checkpoint
-is pinned by repository id, file names, byte sizes and the digest of its `config.json`; its immutable
-commit and the digest of `model.safetensors` are **to be confirmed on the first hosted run**, which prints
-and exports what the Hub served so the maintainer can pin them.
+is pinned by repository id, immutable commit `43046b85ec22…`, file names, byte sizes and the SHA-256 of
+`config.json` and `model.safetensors`; the commit and the weight digest are the values that run observed,
+so the run predates the pin and the next hosted run on this head re-verifies them.
 
 ## Why TimesFM 3.0
 
@@ -68,8 +69,8 @@ this repository. Never edit the `.ipynb` by hand; edit the package or the templa
 1. builds an isolated `uv` environment (managed CPython 3.12.12, 52 hash-locked manylinux wheels) and routes
    every later cell to it — nothing is installed into the kernel and no restart is needed;
 2. carries the package verbatim, states the weights licence, then stages `google/timesfm-3.0-pytorch`
-   (1.32 GB) and checks sizes, the `config.json` digest and the pinned architecture (the weight digest is
-   reported, pending its pin);
+   (1.32 GB) at its immutable commit and checks sizes, the `config.json` and `model.safetensors` digests and
+   the pinned architecture;
 3. fetches the digest-pinned sample — hourly 2 m air temperature for Manila, Cebu and Davao, 14 days,
    Open-Meteo, CC BY 4.0, this repository's own committed copy at a pinned commit — or your own CSV via
    `BYOD_PATH` / the guarded Colab upload;
@@ -173,7 +174,7 @@ src/timesfm_forecasting/
   evaluation.py    chronological holdout, baselines, MASE / sMAPE / quantile loss, recorded verdicts
   provenance.py    runtime versions, result bundle, reload parity
 tools/
-  build_notebook.py          fleet generator (/2.2) + the `revision_pending` and `weights_licence_note` keys
+  build_notebook.py          fleet generator (/2.2) + the optional `revision_pending` (unset since the pin) and `weights_licence_note` keys
   notebook_template.py       the notebook's prose and stage cells
   validate_release_assets.py static release-asset validator (not execution evidence)
   run_notebook.py            sequential cell executor (CI / stand-in)

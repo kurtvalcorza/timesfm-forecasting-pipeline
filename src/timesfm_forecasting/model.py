@@ -18,14 +18,16 @@ carries the restriction into every provenance record.
 
 Revision status
 ---------------
-The Hub's commit API was not reachable from the build environment, so the immutable commit of the
-checkpoint and the SHA-256 of ``model.safetensors`` could not be resolved. ``MODEL_REVISION``
-therefore names the ref ``main`` and ``MODEL_REVISION_STATUS`` says so; the first hosted run records
-the commit the Hub served (``resolved_revision``) and the observed weight digest, and the maintainer
-pins both in this module and the manifest. The file *names* and *byte sizes* and the digest of
-``config.json`` were verified against the Hub's file listing and file contents (see the manifest's
-``verification`` block). ``torch`` and ``timesfm3`` are imported lazily so that the rest of the
-package works without them.
+``MODEL_REVISION`` is the immutable commit ``43046b85ec22d584a13f8098c2ed39c889e129c2``: the commit the Hub
+served for ``google/timesfm-3.0-pytorch`` at ref ``main`` on the maintainer's hosted Colab run of 2026-10-06
+(``docs/execution-evidence/2026-10-06/timesfm_forecasting_colab_86f2213_run2_passed.ipynb``, recorded in
+``docs/release-verification.md``). That run also computed the SHA-256 of the 1,322,898,824-byte
+``model.safetensors`` it staged; the digest is pinned in the manifest and ``verify_snapshot`` now enforces it
+(size and digest) for every manifest entry. The file *names* and *byte sizes* and the digest of
+``config.json`` were verified against the Hub's file listing and file contents when the pin was first
+written (see the manifest's ``provenance`` block). ``stage_missing_files`` still writes
+``resolved-revision.json`` and refuses a snapshot for which the Hub reported a commit other than the pinned
+one. ``torch`` and ``timesfm3`` are imported lazily so that the rest of the package works without them.
 """
 
 from __future__ import annotations
@@ -59,6 +61,7 @@ __all__ = [
     "WEIGHTS_FILENAME",
     "CONFIG_FILENAME",
     "PINNED_WEIGHTS_BYTES",
+    "PINNED_WEIGHTS_SHA256",
     "PINNED_CONFIG_SHA256",
     "REFUSED_WEIGHT_SUFFIXES",
     "EXPECTED_CONFIG",
@@ -75,10 +78,12 @@ __all__ = [
 ]
 
 MODEL_ID = "google/timesfm-3.0-pytorch"
-MODEL_REVISION = "main"
+#: Immutable commit of the checkpoint repository: the commit the Hub served for ref ``main`` on the hosted run below.
+MODEL_REVISION = "43046b85ec22d584a13f8098c2ed39c889e129c2"
 MODEL_REVISION_STATUS = (
-    "unresolved: revision digest to be confirmed on the first hosted run (the Hub's commit API was not "
-    "reachable when this pin was written; the run records the commit served and the model.safetensors SHA-256)"
+    "pinned: the commit the Hub served for google/timesfm-3.0-pytorch at ref main on the maintainer's hosted Colab run "
+    "of 2026-10-06 (docs/execution-evidence/2026-10-06/timesfm_forecasting_colab_86f2213_run2_passed.ipynb); the "
+    "model.safetensors SHA-256 observed on the same run is pinned in the manifest and enforced by verify_snapshot"
 )
 #: The Hub front matter says ``license: other`` with ``license_name: timesfm-non-commercial-license-v1.0``.
 MODEL_LICENSE = "timesfm-non-commercial-license-v1.0"
@@ -100,8 +105,10 @@ MANIFEST_NAME = "dimer-base-manifest.json"
 DEFAULT_WEIGHTS_DIR = Path(__file__).resolve().parents[2] / "weights" / MODEL_KEY
 WEIGHTS_FILENAME = "model.safetensors"
 CONFIG_FILENAME = "config.json"
-#: Byte size of model.safetensors as listed by the Hub (verified); its SHA-256 is pending.
+#: Byte size of model.safetensors as listed by the Hub and as staged on the 2026-10-06 hosted run.
 PINNED_WEIGHTS_BYTES = 1_322_898_824
+#: SHA-256 of model.safetensors, computed in-run over the staged 1,322,898,824-byte file on the 2026-10-06 hosted run.
+PINNED_WEIGHTS_SHA256 = "a7592b0a8432baee54483254e5647856911ce69e09d09a9bb65904b2d98f17da"
 #: SHA-256 of the 1,273-byte config.json, computed from the Hub-served text (verified).
 PINNED_CONFIG_SHA256 = "ff17bbc07b792c5a904cca265b8468579d736a4fe84981da25eb871b0a125bc6"
 REFUSED_WEIGHT_SUFFIXES = frozenset({".bin", ".pt", ".pth", ".ckpt", ".pkl", ".pickle"})
@@ -212,8 +219,10 @@ def stage_missing_files(
 
     Returns the relative paths fetched. Also writes ``resolved-revision.json`` next to the
     manifest with whatever the downloader reported, so a hosted run leaves the commit it
-    actually served on disk for the maintainer to pin. Downloading the weights accepts the
-    non-commercial licence recorded in ``MODEL_LICENSE_TERMS``; the record repeats it.
+    actually served on disk. The files are requested at the pinned commit, so a downloader that
+    reports a different commit is a mismatch: the record flags it and ``ModelIntegrityError`` is
+    raised. Downloading the weights accepts the non-commercial licence recorded in
+    ``MODEL_LICENSE_TERMS``; the record repeats it.
     """
     root = Path(path) if path is not None else DEFAULT_WEIGHTS_DIR
     manifest = read_manifest(root)
@@ -230,13 +239,16 @@ def stage_missing_files(
     for relative_path in missing:
         records.append(fetch(relative_path, root))
     resolved = [r.get("resolved_revision") for r in records if isinstance(r, dict)]
+    served = next((r for r in resolved if r), None)
+    mismatch = served is not None and served != MODEL_REVISION
     (root / "resolved-revision.json").write_text(
         json.dumps(
             {
                 "modelId": MODEL_ID,
                 "requested_revision": MODEL_REVISION,
                 "revision_status": MODEL_REVISION_STATUS,
-                "resolved_revision": next((r for r in resolved if r), None),
+                "resolved_revision": served,
+                "resolved_revision_matches_pin": None if served is None else not mismatch,
                 "fetched": missing,
                 "license": MODEL_LICENSE,
                 "license_terms": MODEL_LICENSE_TERMS,
@@ -246,6 +258,11 @@ def stage_missing_files(
         + "\n",
         encoding="utf-8",
     )
+    if mismatch:
+        raise ModelIntegrityError(
+            f"the Hub reported commit {served!r} for {MODEL_ID} but the pinned revision is {MODEL_REVISION!r}; "
+            f"the snapshot at {root} is not accepted (see resolved-revision.json)"
+        )
     return missing
 
 
@@ -265,11 +282,11 @@ def _config_mismatches(config: dict[str, Any]) -> list[str]:
 
 
 def verify_snapshot(snapshot_path: str | os.PathLike[str]) -> dict[str, Any]:
-    """Check every manifest entry by size and, where the manifest carries one, by SHA-256.
+    """Check every manifest entry by byte size and by SHA-256 against the manifest.
 
-    Entries whose manifest digest is not a 64-hex value (the ``"pending: ..."`` sentinel) are hashed
-    and reported with ``verified: false``; the pipeline never claims a digest it did not pin.
-    Pickle-format weight files anywhere in the directory are refused.
+    Every entry must carry a 64-hex digest; a manifest that does not pin one (the former
+    ``"pending: ..."`` sentinel) is refused rather than reported, so a snapshot is never loaded on a
+    size check alone. Pickle-format weight files anywhere in the directory are refused.
     """
     root = Path(snapshot_path)
     if not root.is_dir():
@@ -282,7 +299,6 @@ def verify_snapshot(snapshot_path: str | os.PathLike[str]) -> dict[str, Any]:
             f"{WEIGHTS_FILENAME} is acceptable"
         )
     files = []
-    pending = []
     for entry in manifest["files"]:
         target = root / entry["path"]
         if not target.is_file():
@@ -292,14 +308,13 @@ def verify_snapshot(snapshot_path: str | os.PathLike[str]) -> dict[str, Any]:
             raise ModelIntegrityError(
                 f"{entry['path']} is {actual_bytes} bytes, expected {entry['bytes']} (manifest)"
             )
-        observed = sha256_file(target)
         expected = entry.get("sha256")
         if not _is_digest(expected):
-            # The manifest marks a digest it does not know with a non-hex sentinel ("pending: ..."), never a
-            # made-up value; the observed digest is reported with verified=False so the maintainer can pin it.
-            pending.append(entry["path"])
-            files.append({"path": entry["path"], "bytes": actual_bytes, "sha256": observed, "verified": False})
-            continue
+            raise ModelIntegrityError(
+                f"manifest carries no SHA-256 digest for {entry['path']} ({expected!r}); every staged file must be "
+                "digest-verified"
+            )
+        observed = sha256_file(target)
         if observed != expected:
             raise ModelIntegrityError(
                 f"{entry['path']} SHA-256 {observed} does not match the manifest digest {expected}"
@@ -324,7 +339,6 @@ def verify_snapshot(snapshot_path: str | os.PathLike[str]) -> dict[str, Any]:
         "resolved_revision": resolved,
         "license": MODEL_LICENSE,
         "files": files,
-        "digests_pending": pending,
         "totalBytes": sum(int(f["bytes"]) for f in files),
     }
 

@@ -372,7 +372,7 @@ CLOSING = """## Interpretation and limits
 
 **Bring your own data.** Supply one CSV with a timestamp column, a numeric value column and optionally a series-id column; set the three column fields in Section 4. The same validation, split, baselines, forecast, evaluation and export run on it; a refusal names the file and the rule. Only upload data you are permitted to process in a hosted runtime; files stay in this runtime and are not published by the notebook.
 
-Successful execution proves that the recorded repository revision's package, carried in this standalone notebook, can build its isolated environment, stage the pinned checkpoint and check its size and config digest (and, once the maintainer pins it, the weight digest), fetch and digest-verify a real public series, validate the data contract, split without leakage, run the zero-shot forecast with point and quantile output, score it beside history-only baselines, and emit the shown machine-readable bundle with reload parity — without the repository being reachable. It does **not** establish benchmark superiority, calibration, forecast quality on other series or horizons, or production fitness.
+Successful execution proves that the recorded repository revision's package, carried in this standalone notebook, can build its isolated environment, stage the pinned checkpoint at its immutable commit and check its sizes and digests, fetch and digest-verify a real public series, validate the data contract, split without leakage, run the zero-shot forecast with point and quantile output, score it beside history-only baselines, and emit the shown machine-readable bundle with reload parity — without the repository being reachable. It does **not** establish benchmark superiority, calibration, forecast quality on other series or horizons, or production fitness.
 
 **AI Assistance Disclosure:** This notebook's code and explanations were developed with generative AI assistance under maintainer direction. The maintainer remains responsible for reviewing the implementation, validating results and making release decisions. AI assistance does not constitute independent verification, provider endorsement or release approval.
 
@@ -383,7 +383,7 @@ Successful execution proves that the recorded repository revision's package, car
 - **"The isolated environment's Python process exited".** Usually the runtime ran out of memory. Restart the session and choose **Run all**; on CPU, close other notebooks first. The checkpoint needs about 1.3 GB of RAM in float32 plus the context.
 - **Out of disk or the checkpoint download stops.** The locked install (PyTorch with its CUDA libraries) and the 1.32 GB checkpoint need several GB of free space. Start a fresh runtime, or delete `dimer_isolated_env_*/` and `weights/` from an earlier attempt.
 - **A size or digest mismatch in Section 3 or 4.** A download was incomplete or altered; the notebook refuses it rather than continuing. Run the cell again; never edit the manifest or the sample digest. A `config.json` mismatch means the Hub served a different checkpoint than the pinned one — stop and report it.
-- **Section 3 reports `digests_pending: ['model.safetensors']`.** Expected until the maintainer pins the weight digest and the immutable commit after the first hosted run; the observed digest and the resolved commit are printed and exported for exactly that purpose.
+- **Section 3 reports a `model.safetensors` SHA-256 mismatch, or a commit other than the pinned one in `resolved-revision.json`.** The Hub served bytes or a commit that differ from what the maintainer's hosted run of 2026-10-06 observed and pinned; the notebook refuses the snapshot. Run the cell again on a fresh runtime; if it repeats, stop and report it with the printed digest and commit.
 - **BYOD is refused in Section 5.** The message names the file and the rule: `[REQUIRED_COLUMNS]` (set the column fields), `[TIMESTAMP_DUPLICATE]`, `[FREQUENCY_GAP]` / `[FREQUENCY_IRREGULAR]`, `[VALUE_MISSING]` / `[VALUE_NUMERIC]`, `[MIN_HISTORY]` (fewer than `HORIZON + 16` rows), `[FREQUENCY_MIXED]`. Fix the file or the policy fields and choose **Run after** from Section 4. An empty or cancelled upload asks you to choose a file or set `BYOD_PATH`.
 - **`SEASON_TOO_LONG` in Section 7.** A series' history is shorter than `SEASON_LENGTH`; lower it (or set it to 1 to disable the seasonal baseline).
 - **Reload parity fails in Section 12.** The exported bundle does not reproduce the evaluated forecast; this is a contract failure, not a data problem. Restart the session and choose **Run all**; if it repeats, report it with the printed problems.
@@ -457,14 +457,10 @@ TEMPLATE = {
     },
     "lock": "tutorials/requirements-colab.lock.txt",
     "pins_file": "tutorials/requirements-colab.in",
-    "revision_pending": (
-        "the immutable commit and the weight digest are to be confirmed on the first hosted run, which prints and "
-        "exports what the Hub served"
-    ),
     "run_all": (
         "Selecting **Run all** in a fresh supported runtime builds the isolated hash-locked environment (nothing is "
         "installed into the kernel, no restart), stages the pinned TimesFM 3.0 checkpoint (1.32 GB safetensors, non-commercial weights licence) and "
-        "checks its size and config digest, fetches the digest-pinned Open-Meteo sample (31 KB, no credential), "
+        "checks its sizes and SHA-256 digests, fetches the digest-pinned Open-Meteo sample (31 KB, no credential), "
         "validates it into an input manifest and shows one named refusal, holds out the last 24 hours of each series "
         "chronologically, scores naive, seasonal-naive and exponential-smoothing baselines, runs the zero-shot forecast "
         "with median and quantile output, records MASE, sMAPE, quantile loss and band coverage beside the baselines "
@@ -523,10 +519,11 @@ TEMPLATE = {
         "production system is outside that licence. The notebook's code and the pipeline package are Apache-2.0; the "
         "sample is CC BY 4.0. If the restriction does not fit your use, the repository's TimesFM 2.5 build (Apache-2.0 "
         "weights) is the fallback; see the repository README.\n\n"
-        "**Model revision status.** The checkpoint is pinned by repository id, file names, byte sizes and the digest of "
-        "its `config.json`; its immutable commit and the digest of `model.safetensors` are to be confirmed on the first "
-        "hosted run (the Hub was unreachable when the pin was written). Section 3 prints `digests_pending` and the "
-        "observed digest, and Section 12 exports both, so the maintainer can pin them."
+        "**Model revision status.** The checkpoint is pinned by repository id, immutable commit, file names, byte sizes "
+        "and the SHA-256 of `config.json` and `model.safetensors`. The commit and the weight digest are the values the "
+        "Hub served and the pipeline computed on the maintainer's hosted Colab run of 2026-10-06 (recorded in the "
+        "repository's `docs/release-verification.md`); Section 3 refuses the snapshot on any size or digest mismatch, "
+        "and Section 12 exports the commit and the digest it verified."
     ),
     "learning_objectives": (
         "by the end you should be able to (1) explain *history → pretrained model → median and quantile forecast*; "
@@ -554,8 +551,8 @@ TEMPLATE = {
     ],
     "external_access": (
         "the Hugging Face Hub, to fetch the pinned `{MODEL_ID}` files (~{total_mb:.0f} MB in total; non-commercial weights "
-        "licence, see above) at the ref `{MODEL_REVISION}` (the immutable commit and the weight digest are to be confirmed on "
-        "the first hosted run, which prints and exports what the Hub served), and `raw.githubusercontent.com` for the pinned "
+        "licence, see above) at the immutable revision `{MODEL_REVISION}` (the commit the Hub served on the maintainer's hosted "
+        "run of 2026-10-06; the weight digest observed on that run is pinned in the manifest), and `raw.githubusercontent.com` for the pinned "
         f"sample (`openmeteo_ph_hourly_temperature.csv`, {SAMPLE_BYTES:,} bytes, SHA-256 `{SAMPLE_SHA256[:8]}…`, the copy "
         f"committed under `examples/sample-data/` of this repository at commit `{SAMPLE_COMMIT[:12]}…`; Open-Meteo, CC BY 4.0), "
         "refused on any mismatch before it is read. The sample is data, not code: nothing is installed from this repository "

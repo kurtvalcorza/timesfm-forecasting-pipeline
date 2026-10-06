@@ -20,8 +20,9 @@ that stage more than one manifest. Single-module templates render as in /1 excep
 
 Repository-local addition (timesfm-forecasting-pipeline, 2026-10-05): the opt-in template key ``revision_pending``
 (a sentence). When set, the header, the External access bullet and Section 3 say that the model ref is not yet an
-immutable commit and quote the sentence, instead of calling the ref "immutable"; nothing else changes. It exists
-because the Hub was unreachable when the pin was written (MOD2 deviation, recorded in STATUS.md and MODEL_CARD.md).
+immutable commit and quote the sentence, instead of calling the ref "immutable"; nothing else changes. It existed
+because the Hub was unreachable when the pin was first written (MOD2 deviation). Since the commit and the weight
+digest were pinned from the 2026-10-06 hosted run the template no longer sets it; the key stays supported.
 
 Repository-local addition (timesfm-forecasting-pipeline, 2026-10-06): the opt-in template key ``weights_licence_note``
 (a markdown paragraph). When set, it is inserted into the Section 3 markdown immediately before the cell that

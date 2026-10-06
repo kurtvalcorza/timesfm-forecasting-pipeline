@@ -17,9 +17,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from timesfm_forecasting.model import sha256_file as _real_sha256_file  # bound before any monkeypatch
+
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = ROOT / "examples" / "sample-data" / "openmeteo_ph_hourly_temperature.csv"
 MANIFEST = ROOT / "weights" / "timesfm-3.0-pytorch" / "dimer-base-manifest.json"
+#: The values the maintainer's hosted Colab run of 2026-10-06 observed and the repository pins (the commit the Hub
+#: served for ref main; the SHA-256 computed in-run over the staged 1,322,898,824-byte model.safetensors). Source:
+#: docs/execution-evidence/2026-10-06/timesfm_forecasting_colab_86f2213_run2_passed.ipynb, last cell.
+RECORDED_REVISION = "43046b85ec22d584a13f8098c2ed39c889e129c2"
+RECORDED_WEIGHTS_SHA256 = "a7592b0a8432baee54483254e5647856911ce69e09d09a9bb65904b2d98f17da"
+RECORDED_WEIGHTS_BYTES = 1_322_898_824
 #: The Hub-served config.json text (1,273 bytes, no trailing newline); its SHA-256 is pinned in model.py.
 CONFIG_JSON_TEXT = (
     '{\n  "input_patch_len": 32,\n  "input_transform": "identity",\n  "linear_detrending_threshold": 0.5,\n'
@@ -61,7 +69,7 @@ class FakeModel:
 
     identity = {
         "model_id": "google/timesfm-3.0-pytorch",
-        "revision": "main",
+        "revision": RECORDED_REVISION,
         "license": "timesfm-non-commercial-license-v1.0",
     }
     device = "cpu"
@@ -207,7 +215,12 @@ def install_standin_modules(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def stage_standin_weights(root: Path) -> Path:
-    """Write the manifest, the exact config.json and a sparse model.safetensors of the pinned size."""
+    """Write the manifest, the exact config.json and a sparse model.safetensors of the pinned size.
+
+    The sparse placeholder cannot carry the pinned digest, so a test that verifies it installs
+    ``standin_sha256_file`` (stand-in evidence); the real digest check is exercised by the tests
+    that stage a small file with a matching or a wrong manifest digest.
+    """
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     root.mkdir(parents=True, exist_ok=True)
     (root / "dimer-base-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -215,8 +228,27 @@ def stage_standin_weights(root: Path) -> Path:
     weights = root / "model.safetensors"
     size = next(f["bytes"] for f in manifest["files"] if f["path"] == "model.safetensors")
     with weights.open("wb") as handle:
-        handle.truncate(size)  # sparse: the digest is pending in the manifest, so any bytes of this size pass
+        handle.truncate(size)  # sparse placeholder of the pinned size; its bytes are zeros, not the checkpoint
     return root
+
+
+def standin_sha256_file(path: Any, *, chunk_size: int = 1 << 20) -> str:
+    """Stand-in for ``model.sha256_file``: the pinned digest for the sparse placeholder, the real digest otherwise.
+
+    Only a ``model.safetensors`` of exactly the pinned byte size is substituted, so every other file
+    (``config.json`` included) is still hashed for real.
+    """
+    target = Path(path)
+    if target.name == "model.safetensors" and target.stat().st_size == RECORDED_WEIGHTS_BYTES:
+        return RECORDED_WEIGHTS_SHA256
+    return _real_sha256_file(target, chunk_size=chunk_size)
+
+
+def install_standin_digest(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the package's ``verify_snapshot`` accept the sparse placeholder (stand-in evidence only)."""
+    from timesfm_forecasting import model as model_mod
+
+    monkeypatch.setattr(model_mod, "sha256_file", standin_sha256_file)
 
 
 @pytest.fixture

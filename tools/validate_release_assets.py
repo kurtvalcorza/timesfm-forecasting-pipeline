@@ -25,6 +25,11 @@ NOTEBOOK_NAME = "timesfm_forecasting_colab.ipynb"
 EXPECTED_PROFILE = "TASK-INFERENCE"
 EXPECTED_MODE = "GUIDED"
 EXPECTED_MODEL_ID = "google/timesfm-3.0-pytorch"
+# Pinned from the maintainer's hosted Colab run of 2026-10-06 (docs/execution-evidence/2026-10-06/
+# timesfm_forecasting_colab_86f2213_run2_passed.ipynb): the commit the Hub served for ref main and the SHA-256
+# computed in-run over the staged model.safetensors.
+EXPECTED_MODEL_REVISION = "43046b85ec22d584a13f8098c2ed39c889e129c2"
+EXPECTED_WEIGHTS_SHA256 = "a7592b0a8432baee54483254e5647856911ce69e09d09a9bb65904b2d98f17da"
 MODEL_LOAD_EXPR = "load_pinned_model(weights_dir=WEIGHTS_DIR)"
 NOTEBOOK_SPEC = "2.2"
 GENERATOR_SPEC = "2.0"  # the vendored generator's metadata value (its NOTEBOOK_SPEC constant)
@@ -32,8 +37,8 @@ STATUS_TOKENS = ("Candidate", "Release-grade")
 PLACEHOLDER = re.compile(r"\b(TODO|TBD|FIXME)\b|# WRITE ME|Insert text here|Tooltip:", re.I)
 SHA40 = re.compile(r"\b[0-9a-f]{40}\b")
 # 40-hex strings a document may legitimately contain: the commit of this repository the pinned sample URL names
-# (also the TimesFM 2.5 Apache-2.0 build the README names as the fallback).
-KNOWN_SHAS = frozenset({"e47259ae75b93e7611c67e13a14d6607997c38f3"})
+# (also the TimesFM 2.5 Apache-2.0 build the README names as the fallback) and the pinned checkpoint commit.
+KNOWN_SHAS = frozenset({"e47259ae75b93e7611c67e13a14d6607997c38f3", EXPECTED_MODEL_REVISION})
 UNSUPPORTED_CLAIMS = re.compile(
     r"\b(production[- ]ready|battle[- ]tested|state[- ]of[- ]the[- ]art results (were|are) reproduced"
     r"|benchmark superiority (is|was) (shown|established)|is release-grade|now release-grade)\b",
@@ -92,7 +97,8 @@ MARKDOWN_MARKERS = (
     "verdicts are recorded, not asserted",
     "not a benchmark",
     "**AI Assistance Disclosure:**",
-    "not yet an immutable commit",
+    f"immutable revision `{EXPECTED_MODEL_REVISION}`",
+    "(never `main`)",
 )
 # Direct library use that must stay inside the carried module cells (the notebook calls the package API).
 FORBIDDEN_OUTSIDE_MODULE = (
@@ -198,12 +204,16 @@ def validate_model_card() -> None:
     _check(not UNSUPPORTED_CLAIMS.search(text), "MODEL_CARD.md: unsupported readiness/benchmark claim")
     _check("non-commercial" in text and "non-production" in text, "MODEL_CARD.md: must state the TimesFM 3.0 weights licence restriction (non-commercial, non-production) (LIC5)")
     _check("timesfm-non-commercial-license-v1.0" in text, "MODEL_CARD.md: must name the weights licence timesfm-non-commercial-license-v1.0")
-    _check("to be confirmed on the first hosted run" in text, "MODEL_CARD.md: must state the pending revision/digest status")
+    _check(EXPECTED_MODEL_REVISION in text, "MODEL_CARD.md: must name the pinned checkpoint commit")
+    _check(EXPECTED_WEIGHTS_SHA256 in text, "MODEL_CARD.md: must record the pinned model.safetensors SHA-256")
+    _check("to be confirmed on the first hosted run" not in text, "MODEL_CARD.md: stale pending-revision wording (the pin is recorded)")
 
 
 def validate_identity_consistency() -> None:
     ident = _package_identity()
     _check(ident["MODEL_ID"] == EXPECTED_MODEL_ID, f"model.py MODEL_ID {ident['MODEL_ID']!r} != {EXPECTED_MODEL_ID!r}")
+    _check(ident["MODEL_REVISION"] == EXPECTED_MODEL_REVISION, f"model.py MODEL_REVISION {ident['MODEL_REVISION']!r} != the commit observed on the 2026-10-06 hosted run")
+    _check(bool(SHA40.fullmatch(ident["MODEL_REVISION"])), "model.py MODEL_REVISION must be an immutable 40-hex commit (MOD2)")
     manifest = json.loads(_read(ROOT / "weights" / ident["MODEL_KEY"] / "dimer-base-manifest.json"))
     _check(manifest["modelId"] == ident["MODEL_ID"] and manifest["revision"] == ident["MODEL_REVISION"], "manifest identity != module identity")
     pending = [f["path"] for f in manifest["files"] if not re.fullmatch(r"[0-9a-f]{64}", str(f.get("sha256")))]
@@ -216,12 +226,17 @@ def validate_identity_consistency() -> None:
             "manifest: a non-SHA revision must carry revisionStatus 'to be confirmed on the first hosted run'",
         )
         _check("STATUS.md" and "to be confirmed on the first hosted run" in _read(ROOT / "STATUS.md"), "STATUS.md must state the pending revision (MOD2 deviation)")
+    else:
+        _check(not pending, f"manifest: the revision is an immutable commit but {pending} carry no 64-hex digest")
+    weights = next((f for f in manifest["files"] if f["path"] == "model.safetensors"), {})
+    _check(weights.get("sha256") == EXPECTED_WEIGHTS_SHA256, "manifest: model.safetensors sha256 != the digest observed on the 2026-10-06 hosted run")
+    _check("provenance" in manifest and "model.safetensors" in manifest["provenance"] and "revision" in manifest["provenance"], "manifest: must state where the revision and each digest came from (provenance block)")
     _check(manifest["totalBytes"] == sum(int(f["bytes"]) for f in manifest["files"]), "manifest totalBytes != sum of files")
     for doc in ("README.md", "MODEL_CARD.md", "STATUS.md", "tutorials/README.md"):
         text = _read(ROOT / doc)
         _check(EXPECTED_MODEL_ID in text, f"{doc}: must name the pinned model id {EXPECTED_MODEL_ID}")
         stray = {s for s in SHA40.findall(text)} - KNOWN_SHAS
-        _check(not stray, f"{doc}: unexpected 40-hex revision(s) {sorted(stray)}; the pin is pending and no commit may be invented")
+        _check(not stray, f"{doc}: unexpected 40-hex revision(s) {sorted(stray)}; only the pinned checkpoint commit and the sample/fallback commit are known")
         if pending:
             _check("pending" in text.lower() or "to be confirmed" in text, f"{doc}: must mention that the weight digest is pending")
 
