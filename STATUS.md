@@ -1,6 +1,6 @@
 # Release status
 
-Current status: **Candidate — verification pending; no hosted run recorded.**
+Current status: **Candidate — verification pending; no successful hosted run recorded (one failed attempt, 2026-10-06).**
 
 ```yaml
 status: Candidate
@@ -25,8 +25,10 @@ The pipeline package, the offline unit/contract suite, `MODEL_CARD.md` and the s
 isolated hash-locked `uv` environment) exist and pass static validation (`tools/validate_release_assets.py`,
 generator `--check`, `ruff`, `pytest` on CI's dependencies, a dry-run install of the lock) and a stand-in
 execution of the notebook's own cells with stub `torch` / `timesfm3` modules. **Stand-in execution is not
-pretrained-inference evidence.** No run of the notebook on a hosted runtime (Colab, Kaggle) has been recorded;
-`docs/release-verification.md` holds the empty recorded-executions table.
+pretrained-inference evidence.** No successful run of the notebook on a hosted runtime (Colab, Kaggle) has been recorded.
+One Colab attempt of `c7bf4a6` on 2026-10-06 failed at the first forecast (a `predict_batch` argument
+error, fixed in the following commit); it is recorded in `docs/release-verification.md` and is not
+promotion evidence.
 
 ## Weights licence restriction
 

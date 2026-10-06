@@ -38,10 +38,13 @@ def test_pins_file_equals_pyproject_versions() -> None:
 def test_status_is_candidate_with_no_hosted_run() -> None:
     status = (ROOT / "STATUS.md").read_text(encoding="utf-8")
     assert "**Candidate" in status and "clean_runtime_evidence: false" in status
-    assert "no hosted run" in status.lower()
+    assert "no successful hosted run" in status.lower()
     rv = (ROOT / "docs" / "release-verification.md").read_text(encoding="utf-8")
     table = rv.split("## Recorded executions", 1)[1]
-    assert "| Date |" in table and not re.search(r"\|\s*\d{4}-\d{2}-\d{2}\s*\|", table), "recorded-executions table must be empty"
+    rows = [line for line in table.splitlines() if re.match(r"\|\s*\d{4}-\d{2}-\d{2}\s*\|", line)]
+    assert "| Date |" in table
+    # Only failed attempts may be recorded while the status says no successful hosted run.
+    assert all("**FAILED**" in row for row in rows), "a recorded run without **FAILED** needs a status update"
 
 
 def test_readme_has_the_colab_link_and_names_the_boundary() -> None:
