@@ -1,6 +1,6 @@
 # Release status
 
-Current status: **Candidate — verification pending; no successful hosted run recorded (one failed attempt, 2026-10-06).**
+Current status: **Candidate — default path passed one hosted Colab run (2026-10-06, `86f2213`); BYOD, an export re-run and a repeated Run all are pending; checkpoint commit and weight digest observed on that run, to be pinned.**
 
 ```yaml
 status: Candidate
@@ -25,10 +25,11 @@ The pipeline package, the offline unit/contract suite, `MODEL_CARD.md` and the s
 isolated hash-locked `uv` environment) exist and pass static validation (`tools/validate_release_assets.py`,
 generator `--check`, `ruff`, `pytest` on CI's dependencies, a dry-run install of the lock) and a stand-in
 execution of the notebook's own cells with stub `torch` / `timesfm3` modules. **Stand-in execution is not
-pretrained-inference evidence.** No successful run of the notebook on a hosted runtime (Colab, Kaggle) has been recorded.
-One Colab attempt of `c7bf4a6` on 2026-10-06 failed at the first forecast (a `predict_batch` argument
-error, fixed in the following commit); it is recorded in `docs/release-verification.md` and is not
-promotion evidence.
+pretrained-inference evidence.** Two maintainer Colab runs are recorded in `docs/release-verification.md` (2026-10-06): `c7bf4a6`
+failed at the first forecast (a `predict_batch` argument error, fixed in `5365a08`); `86f2213` ran the
+default path end to end on CUDA (19/19 cells, no errors, reload parity ok). That run is default-path
+evidence only: BYOD (REL12), an export-cell re-run and a repeated Run all were not exercised, and it is
+not promotion evidence on its own (`clean_runtime_evidence` stays false).
 
 ## Weights licence restriction
 
