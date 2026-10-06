@@ -64,6 +64,7 @@ __all__ = [
     "EXPECTED_CONFIG",
     "EXPECTED_TRANSFORMER",
     "DECODE_SETTINGS",
+    "LOAD_SETTINGS",
     "LoadedModel",
     "check_model_source",
     "read_manifest",
@@ -119,8 +120,13 @@ EXPECTED_TRANSFORMER = {"num_layers": 20, "model_dims": 1280, "num_heads": 16, "
 #: Upstream ``TimesFM3Forecaster.predict_batch`` options the pipeline passes on every call. ``sort_quantiles``
 #: makes the nine slots monotone (the upstream default); the three transforms are off so the output is the
 #: model's own quantile head, and the batch size is the upstream default.
-DECODE_SETTINGS = {
+# Constructor settings (``_ModelConfig`` fields of ``timesfm3.TimesFM3Forecaster``).
+LOAD_SETTINGS = {
     "per_core_batch_size": 4,
+}
+
+# Keyword arguments of ``TimesFM3Forecaster.predict_batch``; nothing else may appear here.
+DECODE_SETTINGS = {
     "return_quantiles": True,
     "sort_quantiles": True,
     "use_symmetric_averaging": False,
@@ -346,6 +352,7 @@ class LoadedModel:
         64-point output patches, so these values are recorded for provenance, not applied by the pipeline.
         """
         return {
+            **LOAD_SETTINGS,
             **DECODE_SETTINGS,
             "context_patch_envelope": min(-(-config.context_length // _INPUT_PATCH) * _INPUT_PATCH, MAX_CONTEXT_POINTS),
             "horizon_patch_envelope": -(-config.horizon // _OUTPUT_PATCH) * _OUTPUT_PATCH,
@@ -412,7 +419,7 @@ def load_pinned_model(
         checkpoint_path=str(root),
         device=resolved_device,
         local_files_only=True,
-        per_core_batch_size=DECODE_SETTINGS["per_core_batch_size"],
+        **LOAD_SETTINGS,
     )
     forecaster_config = getattr(model, "config", None)
     if forecaster_config is not None:

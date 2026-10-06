@@ -149,10 +149,29 @@ class _ForecastOutput:
         self.quantiles = quantiles
 
 
+# Copied from timesfm==3.0.2 (timesfm3/torch/timesfm3_forecaster.py): the ``_ModelConfig`` fields the
+# constructor accepts and the keyword parameters of ``predict_batch``. The stand-in rejects anything
+# else, as upstream does, so a misplaced setting fails here instead of on the first hosted run.
+UPSTREAM_CONFIG_FIELDS = frozenset({
+    "checkpoint_path", "per_core_batch_size", "input_patch_length", "output_patch_length", "quantiles",
+    "median_quantile_index", "use_stitching", "use_linear_detrending", "linear_detrending_threshold",
+    "use_iterative_cpm_revin", "use_frozen_running_stats", "use_variate_attention", "value_clip",
+    "input_transform", "use_sdpa", "device", "residual_block_config", "transformer_config", "cache_dir",
+    "force_download", "token", "revision", "local_files_only",
+})
+UPSTREAM_PREDICT_BATCH_PARAMS = frozenset({
+    "contexts", "horizon", "past_only_covariates", "past_future_covariates", "ts_ids", "return_quantiles",
+    "use_symmetric_averaging", "make_positive", "sort_quantiles", "use_znorm", "padding_mode",
+})
+
+
 class _FakeTimesFM3Forecaster:
     """Stand-in for ``timesfm3.TimesFM3Forecaster``: same constructor and ``predict_batch`` surface."""
 
     def __init__(self, config: Any = None, **kwargs: Any) -> None:
+        unknown = sorted(set(kwargs) - UPSTREAM_CONFIG_FIELDS)
+        if unknown:
+            raise TypeError(f"_ModelConfig.__init__() got unexpected keyword arguments {unknown}")
         self.kwargs = kwargs
         self.loaded_from: str | None = None
         path = kwargs.get("checkpoint_path")
@@ -165,6 +184,9 @@ class _FakeTimesFM3Forecaster:
         self.config = _FakeForecasterConfig()
 
     def predict_batch(self, contexts: list[np.ndarray], horizon: int, return_quantiles: bool = False, **kwargs: Any):
+        unknown = sorted(set(kwargs) - UPSTREAM_PREDICT_BATCH_PARAMS)
+        if unknown:
+            raise TypeError(f"TimesFM3Forecaster.predict_batch() got an unexpected keyword argument {unknown[0]!r}")
         point, q = FakeModel().predict(list(contexts), horizon, None)
         for i in range(len(contexts)):
             yield _ForecastOutput(point[i], q[i] if return_quantiles else None)

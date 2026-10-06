@@ -170,3 +170,13 @@ def test_real_pinned_weights_load_and_forecast(tmp_path: Path) -> None:
     assert point.shape == (1, 12) and q.shape == (1, 12, N_SLOTS)
     assert np.allclose(point, q[:, :, MEDIAN_SLOT])
     assert np.all(np.diff(q, axis=-1) >= 0)  # sort_quantiles=True makes the slots monotone
+
+
+def test_settings_match_the_upstream_call_signatures():
+    """Hosted run 2026-10-06 failed: ``per_core_batch_size`` was passed to ``predict_batch``."""
+    from timesfm_forecasting.model import DECODE_SETTINGS, LOAD_SETTINGS
+
+    from .conftest import UPSTREAM_CONFIG_FIELDS, UPSTREAM_PREDICT_BATCH_PARAMS
+
+    assert set(DECODE_SETTINGS) <= UPSTREAM_PREDICT_BATCH_PARAMS - {"contexts", "horizon"}
+    assert set(LOAD_SETTINGS) <= UPSTREAM_CONFIG_FIELDS
