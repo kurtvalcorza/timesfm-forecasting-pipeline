@@ -1,7 +1,7 @@
 [project]
 name = "timesfm-forecasting"
 version = "0.1.0"
-description = "DIMER pipeline for zero-shot time-series forecasting with a pinned Google TimesFM 2.5 checkpoint"
+description = "DIMER pipeline for zero-shot time-series forecasting with a pinned Google TimesFM 3.0 checkpoint (non-commercial weights)"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { file = "LICENSE" }

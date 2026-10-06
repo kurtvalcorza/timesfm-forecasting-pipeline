@@ -200,7 +200,7 @@ def test_long_history_is_truncated_with_a_report() -> None:
     frame = pd.DataFrame({"timestamp": pd.date_range("2000-01-01", periods=n, freq="h"), "value": np.arange(n, dtype=float)})
     result = validate_series(frame, ForecastConfig(horizon=12), source="long.csv")
     assert result.series["series"].truncated_from == n and result.series["series"].n_rows_out == MAX_CONTEXT_POINTS
-    assert any("most recent 16384" in c for c in result.changes)
+    assert any("most recent 15360" in c for c in result.changes)
 
 
 def test_unsorted_rows_are_sorted_and_tz_dropped() -> None:

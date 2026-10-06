@@ -45,7 +45,8 @@ def test_bundle_round_trip_and_parity(tmp_path: Path) -> None:
     assert set(paths) == {"forecast_csv", "evaluation_json", "provenance_json", "result_json"}
     res = json.loads(Path(paths["result_json"]).read_text(encoding="utf-8"))
     assert res["format"] == "dimer-forecast-bundle" and res["n_rows"] == 12
-    assert res["model"]["model_id"] == "google/timesfm-2.5-200m-pytorch"
+    assert res["model"]["model_id"] == "google/timesfm-3.0-pytorch"
+    assert res["model"]["license"] == "timesfm-non-commercial-license-v1.0"
     assert set(res["files"]) == {"forecast_csv", "evaluation_json", "provenance_json"}
     reloaded, res2 = reload_result_bundle(tmp_path, "t")
     assert res2 == res
@@ -70,4 +71,4 @@ def test_parity_failure_raises_with_named_problems(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="prediction: max abs difference"):
         check_reload_parity(result.forecast, changed)
     with pytest.raises(RuntimeError, match="columns differ"):
-        check_reload_parity(result.forecast, changed.drop(columns="mean"))
+        check_reload_parity(result.forecast, changed.drop(columns="q0.1"))

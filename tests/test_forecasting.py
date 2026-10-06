@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from timesfm_forecasting import ForecastConfig, ModelIntegrityError, forecast, validate_series
-from timesfm_forecasting.forecasting import MEAN_COLUMN, POINT_COLUMN, STEP_COLUMN
+from timesfm_forecasting.forecasting import POINT_COLUMN, STEP_COLUMN
 
 from .conftest import FakeModel, make_series
 
@@ -23,14 +23,15 @@ def test_forecast_rows_columns_and_median_contract() -> None:
     model = FakeModel()
     result = forecast(v, config, model)
     f = result.forecast
-    assert list(f.columns) == ["series_id", "timestamp", STEP_COLUMN, POINT_COLUMN, MEAN_COLUMN, "q0.1", "q0.5", "q0.9"]
+    assert list(f.columns) == ["series_id", "timestamp", STEP_COLUMN, POINT_COLUMN, "q0.1", "q0.5", "q0.9"]
     assert len(f) == 24 and f.groupby("series_id").size().to_dict() == {"A": 12, "B": 12}
     assert (f[POINT_COLUMN] == f["q0.5"]).all()
     assert (f["q0.1"] <= f["q0.5"]).all() and (f["q0.5"] <= f["q0.9"]).all()
-    assert (f[MEAN_COLUMN] != f[POINT_COLUMN]).all()  # the mean head is exported separately
+    assert "mean" not in f.columns  # TimesFM 3.0 has no mean head; nothing is invented for one
     assert f[STEP_COLUMN].tolist() == list(range(1, 13)) * 2
     assert result.provenance["effective_context_length"] == {"A": 48, "B": 48}
     assert result.provenance["point_forecast_semantics"].startswith("median")
+    assert result.provenance["decode_settings"]["stand_in"] is True
     assert model.calls[0]["lengths"] == [48, 48]
 
 

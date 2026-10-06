@@ -1,4 +1,4 @@
-"""Shared fixtures. Nothing here needs torch, timesfm or the network.
+"""Shared fixtures. Nothing here needs torch, timesfm3 or the network.
 
 The stand-in stubs (``install_standin_modules``, ``stage_standin_weights``) let the notebook's own
 cells execute end to end in CI. Every result they produce is **stand-in evidence**: it proves the
@@ -19,15 +19,26 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = ROOT / "examples" / "sample-data" / "openmeteo_ph_hourly_temperature.csv"
-MANIFEST = ROOT / "weights" / "timesfm-2.5-200m-pytorch" / "dimer-base-manifest.json"
-#: The Hub-served config.json text (475 bytes, no trailing newline); its SHA-256 is pinned in model.py.
+MANIFEST = ROOT / "weights" / "timesfm-3.0-pytorch" / "dimer-base-manifest.json"
+#: The Hub-served config.json text (1,273 bytes, no trailing newline); its SHA-256 is pinned in model.py.
 CONFIG_JSON_TEXT = (
-    '{\n  "architectures": [\n    "TimesFmModelForPrediction"\n  ],\n  "context_length": 16384,\n  "head_dim": 80,\n'
-    '  "hidden_size": 1280,\n  "horizon_length": 128,\n  "intermediate_size": 1280,\n  "model_type": "timesfm",\n'
-    '  "num_attention_heads": 16,\n  "num_hidden_layers": 20,\n  "patch_length": 32,\n  "quantile_horizon_length": 1024,\n'
-    '  "quantiles": [\n    0.1,\n    0.2,\n    0.3,\n    0.4,\n    0.5,\n    0.6,\n    0.7,\n    0.8,\n    0.9\n  ],\n'
-    '  "rms_norm_eps": 1e-06,\n  "torch_compile": false\n}'
+    '{\n  "input_patch_len": 32,\n  "input_transform": "identity",\n  "linear_detrending_threshold": 0.5,\n'
+    '  "output_patch_len": 64,\n  "quantiles": [\n    0.1,\n    0.2,\n    0.3,\n    0.4,\n    0.5,\n    0.6,\n'
+    '    0.7,\n    0.8,\n    0.9\n  ],\n  "residual_block_config": {\n    "activation": "relu",\n'
+    '    "dropout": 0.0,\n    "hidden_dims": 1280,\n    "identity_skip": false,\n    "output_dims": 1280,\n'
+    '    "prenorm": "none",\n    "use_bias": false\n  },\n  "transformer_config": {\n    "num_layers": 20,\n'
+    '    "transformer": {\n      "attention_norm": "rms",\n      "causal_attention": true,\n'
+    '      "debug_no_masking": false,\n      "deterministic": true,\n      "feedforward_norm": "rms",\n'
+    '      "ff_activation": "relu",\n      "hidden_dims": 1280,\n      "max_variates": 32,\n'
+    '      "model_dims": 1280,\n      "num_heads": 16,\n      "paired_token_skip_second": false,\n'
+    '      "qk_norm": "rms",\n      "training": true,\n      "use_bias": false,\n'
+    '      "use_memory_efficient_attention": true,\n      "use_rope_seq": true,\n      "use_rope_var": false,\n'
+    '      "use_sdpa": true,\n      "v_norm": "none"\n    },\n    "use_remat": true\n  },\n'
+    '  "use_frozen_running_stats": false,\n  "use_iterative_cpm_revin": true,\n  "use_linear_detrending": true,\n'
+    '  "use_stitching": true,\n  "use_variate_attention": true,\n  "value_clip": 1e+20\n}'
 )
+MEDIAN_SLOT = 4
+N_SLOTS = 9
 
 
 def make_series(
@@ -45,10 +56,14 @@ class FakeModel:
     """Deterministic stand-in for ``LoadedModel``: seasonal-naive median with a symmetric spread.
 
     Stand-in evidence only. ``predict`` honours the real contract: ``(n, horizon)`` point equal to the
-    median slot and ``(n, horizon, 10)`` quantiles with the mean head in slot 0.
+    median slot and ``(n, horizon, 9)`` quantiles, slot ``k`` being the decile ``0.1 * (k + 1)``.
     """
 
-    identity = {"model_id": "google/timesfm-2.5-200m-pytorch", "revision": "main", "license": "apache-2.0"}
+    identity = {
+        "model_id": "google/timesfm-3.0-pytorch",
+        "revision": "main",
+        "license": "timesfm-non-commercial-license-v1.0",
+    }
     device = "cpu"
     dtype = "torch.float32"
     source = "stand-in (no pretrained weights)"
@@ -58,22 +73,21 @@ class FakeModel:
         self.spread = spread
         self.calls: list[dict[str, Any]] = []
 
-    def compile_for(self, config: Any) -> dict[str, Any]:
-        return {"max_context": config.context_length, "max_horizon": config.horizon, "stand_in": True}
+    def decode_settings(self, config: Any) -> dict[str, Any]:
+        return {"context_patch_envelope": config.context_length, "horizon_patch_envelope": config.horizon, "stand_in": True}
 
     def predict(self, inputs: list[np.ndarray], horizon: int, config: Any) -> tuple[np.ndarray, np.ndarray]:
         self.calls.append({"n": len(inputs), "horizon": horizon, "lengths": [len(x) for x in inputs]})
         n = len(inputs)
-        q = np.zeros((n, horizon, 10))
+        q = np.zeros((n, horizon, N_SLOTS))
         for i, x in enumerate(inputs):
             x = np.asarray(x, dtype=float)
             m = self.period if len(x) >= self.period else 1
             season = x[-m:]
             base = np.array([season[k % m] for k in range(horizon)])
-            q[i, :, 0] = base + 0.01  # mean head differs from the median by construction
-            for slot in range(1, 10):
-                q[i, :, slot] = base + (slot - 5) * self.spread / 4
-        return q[:, :, 5].copy(), q
+            for slot in range(N_SLOTS):
+                q[i, :, slot] = base + (slot - MEDIAN_SLOT) * self.spread / 4
+        return q[:, :, MEDIAN_SLOT].copy(), q
 
 
 @pytest.fixture
@@ -96,7 +110,7 @@ def fake_model() -> FakeModel:
 
 
 # ---------------------------------------------------------------------------
-# Stand-in modules for the notebook's own cells (no torch, no timesfm, no network)
+# Stand-in modules for the notebook's own cells (no torch, no timesfm3, no network)
 # ---------------------------------------------------------------------------
 
 
@@ -119,47 +133,55 @@ class _FakeInner:
         self.device = device
 
 
-class _FakeTimesFM:
-    """Stand-in for ``timesfm.TimesFM_2p5_200M_torch``: same call surface, deterministic numbers."""
+class _FakeForecasterConfig:
+    """What ``TimesFM3Forecaster.config`` reports after loading from a directory with the pinned config.json."""
 
-    def __init__(self, torch_compile: bool = False, **kwargs: Any) -> None:
-        self.model = _FakeInner()
-        self.torch_compile = torch_compile
-        self.forecast_config = None
+    input_patch_length = 32
+    output_patch_length = 64
+    quantiles = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    median_quantile_index = MEDIAN_SLOT
+
+
+class _ForecastOutput:
+    def __init__(self, forecast: np.ndarray, quantiles: np.ndarray | None) -> None:
+        self.ts_id = None
+        self.forecast = forecast
+        self.quantiles = quantiles
+
+
+class _FakeTimesFM3Forecaster:
+    """Stand-in for ``timesfm3.TimesFM3Forecaster``: same constructor and ``predict_batch`` surface."""
+
+    def __init__(self, config: Any = None, **kwargs: Any) -> None:
+        self.kwargs = kwargs
         self.loaded_from: str | None = None
+        path = kwargs.get("checkpoint_path")
+        if path is None or not Path(path).is_dir() or not (Path(path) / "model.safetensors").is_file():
+            raise FileNotFoundError(f"stand-in forecaster needs a snapshot directory with model.safetensors: {path}")
+        self.loaded_from = str(path)
+        self.model = _FakeInner()
+        self.device = kwargs.get("device") or "cpu"
+        self.model.to(self.device)
+        self.config = _FakeForecasterConfig()
 
-    def load_checkpoint(self, path: str, **kwargs: Any) -> None:
-        if not Path(path).is_file():
-            raise FileNotFoundError(path)
-        self.loaded_from = path
-
-    def compile(self, forecast_config: Any, **kwargs: Any) -> None:
-        self.forecast_config = forecast_config
-
-    def forecast(self, horizon: int, inputs: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
-        if self.forecast_config is None:
-            raise RuntimeError("Model is not compiled. Please call compile() first.")
-        return FakeModel().predict(inputs, horizon, None)
+    def predict_batch(self, contexts: list[np.ndarray], horizon: int, return_quantiles: bool = False, **kwargs: Any):
+        point, q = FakeModel().predict(list(contexts), horizon, None)
+        for i in range(len(contexts)):
+            yield _ForecastOutput(point[i], q[i] if return_quantiles else None)
 
 
 def install_standin_modules(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Inject fake ``torch`` and ``timesfm`` modules (stand-in evidence only)."""
+    """Inject fake ``torch`` and ``timesfm3`` modules (stand-in evidence only)."""
     torch = types.ModuleType("torch")
     torch.__version__ = "0.0.0+standin"
     cuda = types.SimpleNamespace(is_available=lambda: False, device_count=lambda: 0)
     torch.cuda = cuda
     torch.device = lambda name: name
     monkeypatch.setitem(sys.modules, "torch", torch)
-    timesfm = types.ModuleType("timesfm")
-    timesfm.__version__ = "0.0.0+standin"
-
-    class ForecastConfig:
-        def __init__(self, **kwargs: Any) -> None:
-            self.__dict__.update(kwargs)
-
-    timesfm.ForecastConfig = ForecastConfig
-    timesfm.TimesFM_2p5_200M_torch = _FakeTimesFM
-    monkeypatch.setitem(sys.modules, "timesfm", timesfm)
+    timesfm3 = types.ModuleType("timesfm3")
+    timesfm3.__version__ = "0.0.0+standin"
+    timesfm3.TimesFM3Forecaster = _FakeTimesFM3Forecaster
+    monkeypatch.setitem(sys.modules, "timesfm3", timesfm3)
 
 
 def stage_standin_weights(root: Path) -> Path:
@@ -177,4 +199,4 @@ def stage_standin_weights(root: Path) -> Path:
 
 @pytest.fixture
 def standin_weights(tmp_path: Path) -> Path:
-    return stage_standin_weights(tmp_path / "weights" / "timesfm-2.5-200m-pytorch")
+    return stage_standin_weights(tmp_path / "weights" / "timesfm-3.0-pytorch")

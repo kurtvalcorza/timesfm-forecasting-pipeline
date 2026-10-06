@@ -2,16 +2,21 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/kurtvalcorza/timesfm-forecasting-pipeline)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/timesfm-forecasting-pipeline/blob/main/tutorials/timesfm_forecasting_colab.ipynb)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-google%2Ftimesfm--2.5--200m--pytorch-ffcc4d?style=flat)](https://huggingface.co/google/timesfm-2.5-200m-pytorch)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-google%2Ftimesfm--3.0--pytorch-ffcc4d?style=flat)](https://huggingface.co/google/timesfm-3.0-pytorch)
 [![Upstream](https://img.shields.io/badge/Upstream-google--research%2Ftimesfm-181717?style=flat&logo=github&logoColor=white)](https://github.com/google-research/timesfm)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Code: Apache-2.0](https://img.shields.io/badge/Code-Apache_2.0-blue.svg)](LICENSE)
+[![Weights: non-commercial](https://img.shields.io/badge/Weights-TimesFM%20Non--Commercial%20v1.0-red.svg)](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE)
 
 A DIMER pipeline that runs **zero-shot time-series forecasting** with Google's
-[TimesFM 2.5](https://huggingface.co/google/timesfm-2.5-200m-pytorch), a pretrained forecasting
+[TimesFM 3.0](https://huggingface.co/google/timesfm-3.0-pytorch), a pretrained forecasting
 foundation model, and teaches it in a guided Colab notebook. You supply a long-format CSV (timestamp,
 value, optional series id); the pipeline validates it, stages and checks one pinned checkpoint, and
 returns a median point forecast with model quantiles, scored chronologically beside naive, seasonal-naive
 and exponential-smoothing baselines. Nothing is trained or fine-tuned.
+
+> **Weights licence.** The TimesFM 3.0 weights are distributed under the *TimesFM Non-Commercial License
+> v1.0*: **non-commercial and non-production use only**, no redistribution of the model or of derivatives.
+> The code here is Apache-2.0. See [Why TimesFM 3.0](#why-timesfm-30) and [NOTICE](NOTICE).
 
 See [MODEL_CARD.md](MODEL_CARD.md) for capabilities, limits, supply-chain pins and licence.
 
@@ -23,13 +28,31 @@ is pinned by repository id, file names, byte sizes and the digest of its `config
 commit and the digest of `model.safetensors` are **to be confirmed on the first hosted run**, which prints
 and exports what the Hub served so the maintainer can pin them.
 
-## Why TimesFM 2.5 and not 3.0
+## Why TimesFM 3.0
 
-The `timesfm` package on PyPI (pinned at `3.0.2`) ships both the 2.5 and the 3.0 implementations. The
-**2.5 weights are Apache-2.0**; the TimesFM 3.0 weights are distributed under a separate
-`timesfm-non-commercial-license-v1.0` and are restricted to non-commercial, non-production use (upstream
-README). This repository packages the 2.5 checkpoint so that code, weights and sample all carry permissive
-licences. Switching to 3.0 is a maintainer decision recorded in STATUS.md as an open question.
+The maintainer chose the current TimesFM generation. The `timesfm` package on PyPI (pinned at `3.0.2`) ships
+the 3.0 implementation as its `timesfm3` package, and `google/timesfm-3.0-pytorch` is the checkpoint it
+loads: a stacked mixing transformer (20 layers, model dimension 1280, 16 heads; 330.7M parameters per the
+Hub) with variate attention and iterative CPM RevIN, reading 32-point input patches, decoding 64-point
+output patches, with a 15,360-point context limit and nine quantile slots (deciles 0.1–0.9; the median at
+slot 4 is the point forecast; there is no mean head). The pipeline passes plain numbers with no frequency
+label and exposes no covariates.
+
+**Licence restriction.** The 3.0 weights are distributed by Google LLC under the
+[TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE)
+(Hub front matter `license: other`, `license_name: timesfm-non-commercial-license-v1.0`). In the licence's
+own terms that is **non-commercial and non-production use only**: testing, evaluation and research not tied
+to commercial gain, production deployment or revenue generation; no use in end-user-facing or production
+systems; no redistribution of the model or of derivatives; a commercial licence from Google for anything
+else. The pipeline code, tests, tooling and notebook are Apache-2.0 and the sample is CC BY 4.0; the
+Apache-2.0 licence does not extend to the weights, which the notebook downloads at run time and this
+repository never commits. The restriction is stated in [NOTICE](NOTICE), [MODEL_CARD.md](MODEL_CARD.md),
+[STATUS.md](STATUS.md) and in the notebook's header, prerequisites and the note before its download cell.
+
+**Fallback.** If the restriction does not fit your use, the repository's TimesFM 2.5 build — pinned to
+`google/timesfm-2.5-200m-pytorch`, whose weights are Apache-2.0 — is the fallback. It is the state of this
+branch at commit `e47259ae75b93e7611c67e13a14d6607997c38f3` (same package layout and notebook contract;
+2.5 exports an additional `mean` column and uses a 16,384-point context limit).
 
 ## Live tutorial
 
@@ -44,12 +67,14 @@ this repository. Never edit the `.ipynb` by hand; edit the package or the templa
 
 1. builds an isolated `uv` environment (managed CPython 3.12.12, 52 hash-locked manylinux wheels) and routes
    every later cell to it — nothing is installed into the kernel and no restart is needed;
-2. carries the package verbatim, then stages `google/timesfm-2.5-200m-pytorch` and checks sizes and the
-   `config.json` digest (the weight digest is reported, pending its pin);
+2. carries the package verbatim, states the weights licence, then stages `google/timesfm-3.0-pytorch`
+   (1.32 GB) and checks sizes, the `config.json` digest and the pinned architecture (the weight digest is
+   reported, pending its pin);
 3. fetches the digest-pinned sample — hourly 2 m air temperature for Manila, Cebu and Davao, 14 days,
-   Open-Meteo, CC BY 4.0 — or your own CSV via `BYOD_PATH` / the guarded Colab upload;
+   Open-Meteo, CC BY 4.0, this repository's own committed copy at a pinned commit — or your own CSV via
+   `BYOD_PATH` / the guarded Colab upload;
 4. validates into an input manifest with named refusals, holds out the last 24 hours chronologically,
-   scores three history-only baselines, runs the zero-shot forecast with `prediction` (median), `mean`,
+   scores three history-only baselines, runs the zero-shot forecast with `prediction` (median),
    `q0.1`, `q0.5`, `q0.9`, and records MASE, sMAPE, quantile loss and band coverage beside the baselines
    with **no quality assertion**;
 5. runs one Predict → Change one thing → Run → Observe → Explain activity (context length), forecasts
@@ -72,7 +97,7 @@ uv run pytest -m "not integration"           # unit, contract, BYOD matrix, stan
 uv run python tools/validate_release_assets.py
 uv run python tools/build_notebook.py --check
 
-uv sync --locked --extra dev --extra model   # real weights (downloads ~925 MB on first use)
+uv sync --locked --extra dev --extra model   # real weights (downloads ~1.32 GB on first use; non-commercial licence)
 uv run pytest -m integration
 ```
 
@@ -87,11 +112,12 @@ validation = validate_series(frame, config, source="my_series.csv")
 model = load_pinned_model(device="auto")                       # only the pinned checkpoint is accepted
 result = forecast(validation, config, model)
 
-result.forecast      # series_id, timestamp, step, prediction, mean, q0.1, q0.5, q0.9
-result.provenance    # horizon, effective context per series, compile settings, semantics
+result.forecast      # series_id, timestamp, step, prediction, q0.1, q0.5, q0.9
+result.provenance    # horizon, effective context per series, decode settings, semantics
 ```
 
-`prediction` is the **median (q0.5)**, never the mean; `mean` is the model's separate mean head.
+`prediction` is the **median (q0.5)**, slot 4 of the model's nine quantile slots; TimesFM 3.0 has no mean
+head and the pipeline invents none. The nine slots are sorted monotone by the upstream forecaster.
 
 ## Chronological evaluation
 
@@ -131,7 +157,8 @@ One CSV, long format. Rules (every refusal reads `[RULE] file: reason`):
 | `VALUE_NUMERIC`, `VALUE_INFINITE`, `VALUE_MISSING`, `VALUE_MISSING_FRACTION` | non-numeric, infinite or missing values (unless `nan_policy="interpolate"`, at most 20 % of a series) |
 | `MIN_OBSERVATIONS`, `MIN_HISTORY`, `MAX_SERIES`, `MAX_ROWS` | fewer than 3 rows; fewer than `horizon + 16` rows; more than 1,000 series or 2,000,000 rows |
 
-Histories above 16,384 points are truncated to their most recent points and the truncation is reported.
+Histories above 15,360 points (the model's context limit) are truncated to their most recent points and the
+truncation is reported.
 Monthly, quarterly and yearly series are accepted as calendar frequencies.
 
 ## Repository layout
@@ -146,12 +173,12 @@ src/timesfm_forecasting/
   evaluation.py    chronological holdout, baselines, MASE / sMAPE / quantile loss, recorded verdicts
   provenance.py    runtime versions, result bundle, reload parity
 tools/
-  build_notebook.py          fleet generator (/2.2) + the `revision_pending` wording key
+  build_notebook.py          fleet generator (/2.2) + the `revision_pending` and `weights_licence_note` keys
   notebook_template.py       the notebook's prose and stage cells
   validate_release_assets.py static release-asset validator (not execution evidence)
   run_notebook.py            sequential cell executor (CI / stand-in)
 tutorials/                   notebook, requirements-colab.in (pins), requirements-colab.lock.txt (hashes)
-weights/timesfm-2.5-200m-pytorch/dimer-base-manifest.json   file manifest (weights never committed)
+weights/timesfm-3.0-pytorch/dimer-base-manifest.json   file manifest and licence record (weights never committed)
 examples/sample-data/        the Open-Meteo sample, its SHA256SUMS and dataset card
 tests/                       unit, contract, BYOD matrix, stand-in notebook execution
 docs/release-verification.md release gate and the (empty) recorded-executions table
@@ -159,9 +186,11 @@ docs/release-verification.md release gate and the (empty) recorded-executions ta
 
 ## Licence
 
-Pipeline code: [Apache-2.0](LICENSE), Copyright 2026 Kurt Valcorza. The `timesfm` package and the
-TimesFM 2.5 weights are Apache-2.0 (Google LLC); the sample is CC BY 4.0 (Open-Meteo). See
-[NOTICE](NOTICE) and [MODEL_CARD.md](MODEL_CARD.md).
+Pipeline code: [Apache-2.0](LICENSE), Copyright 2026 Kurt Valcorza. The `timesfm` package (inference code)
+is Apache-2.0 (Google LLC). The **TimesFM 3.0 weights are not Apache-2.0**: they are under the TimesFM
+Non-Commercial License v1.0 — non-commercial and non-production use only, no redistribution — and are
+downloaded at run time, never committed. The sample is CC BY 4.0 (Open-Meteo). See [NOTICE](NOTICE),
+[MODEL_CARD.md](MODEL_CARD.md) and [Why TimesFM 3.0](#why-timesfm-30).
 
 ## AI Assistance Disclosure
 

@@ -5,7 +5,7 @@ package modules (seven, in dependency order) and the model pin/stage/verify cell
 generator from repository sources so they cannot drift from the package.
 
 This template configures a GUIDED TASK-INFERENCE unit ("Can a foundation model beat a seasonal rule of
-thumb?"): the pinned TimesFM 2.5 checkpoint is staged and size/digest-checked; a digest-pinned real series
+thumb?"): the pinned TimesFM 3.0 checkpoint (non-commercial weights) is staged and size/digest-checked; a digest-pinned real series
 (Open-Meteo hourly temperature for three Philippine cities) is fetched, validated into an input manifest and
 split chronologically; three history-only baselines are scored; the zero-shot forecast is run with point
 (median) and quantile output; MASE, sMAPE and quantile loss are recorded beside the baselines with no quality
@@ -22,10 +22,11 @@ from __future__ import annotations
 
 REPO = "timesfm-forecasting-pipeline"
 STEM = "timesfm_forecasting"
+# The committed copy under examples/sample-data/ of this repository, at the commit that added it.
+SAMPLE_COMMIT = "e47259ae75b93e7611c67e13a14d6607997c38f3"
 SAMPLE_URL = (
-    "https://raw.githubusercontent.com/kurtvalcorza/chronos-2-forecasting-pipeline/"
-    "81ab292253c75531a9192fd22c44d8083633d5a8/examples/byod-data/open-meteo-ph-temperature/"
-    "openmeteo_ph_hourly_temperature.csv"
+    f"https://raw.githubusercontent.com/kurtvalcorza/{REPO}/{SAMPLE_COMMIT}/"
+    "examples/sample-data/openmeteo_ph_hourly_temperature.csv"
 )
 SAMPLE_SHA256 = "74163ee609cda87869b7c13f4c2aa59343f94b4ba42d2e57331034902fe04f1a"
 SAMPLE_BYTES = 31275
@@ -52,7 +53,7 @@ CELL_4 = _cell(
 
 *Core concept.* **Input:** one CSV, long format: a timestamp column, a numeric value column and, optionally, a series-id column. **System:** a pinned download with a size and SHA-256 check, or your own file. **Output:** a raw table the next section validates.
 
-The default sample is **real weather**: hourly air temperature at 2 m for Manila, Cebu and Davao over 14 days (2026-08-26 to 2026-09-08 UTC), 3 series × 336 hours, from the Open-Meteo historical API (CC BY 4.0, *weather data by Open-Meteo.com*), fetched from a commit-pinned GitHub URL and refused if its size or digest differs. The observation window starts after the checkpoint's October 2025 release, so these exact values cannot be in its pretraining data; weather from the same sources for earlier periods may be. Three grid cells over two weeks are **tutorial data, not a benchmark**.
+The default sample is **real weather**: hourly air temperature at 2 m for Manila, Cebu and Davao over 14 days (2026-08-26 to 2026-09-08 UTC), 3 series × 336 hours, from the Open-Meteo historical API (CC BY 4.0, *weather data by Open-Meteo.com*), fetched from a commit-pinned GitHub URL (this repository's own committed copy) and refused if its size or digest differs. The checkpoint's model card names its pretraining sources (GiftEvalPretrain, Wikipedia pageviews to November 2023, Google Trends to the end of 2022, synthetic and augmented data), and the observation window lies after every stated cut-off; the Hub revision of the checkpoint (2026-09-02) does overlap the window, so these exact values are unlikely, not impossible, to be in its pretraining data, and weather from the same sources for earlier periods may be. Three grid cells over two weeks are **tutorial data, not a benchmark**.
 
 **Form fields.** `USE_BYOD`, `BYOD_PATH` and the three column fields (`TIMESTAMP_FIELD`, `VALUE_FIELD`, `SERIES_ID_FIELD`; leave the last empty for a single-series file) are the only values meant to be edited. With `USE_BYOD = True`, the cell reads `BYOD_PATH` when it is set and otherwise opens the Colab upload dialog (only then is `google.colab` imported). `HORIZON` is the number of steps held out and forecast; `CONTEXT_LENGTH` the most recent points shown to the model; `SEASON_LENGTH` the period of the seasonal-naive baseline and of MASE scaling (24 for hourly data with a daily cycle; set it to your data's period, or 1 to disable the seasonal baseline). `NAN_POLICY` and `GAP_POLICY` decide whether missing values and skipped timestamps are refused or filled with a report.
 
@@ -83,7 +84,7 @@ import pandas as pd
 SAMPLE_URL = '__SAMPLE_URL__'
 SAMPLE_SHA256 = '__SAMPLE_SHA256__'
 SAMPLE_BYTES = __SAMPLE_BYTES__
-SAMPLE_LICENSE = 'CC BY 4.0 (weather data by Open-Meteo.com); redistributed from the pinned commit of kurtvalcorza/chronos-2-forecasting-pipeline'
+SAMPLE_LICENSE = 'CC BY 4.0 (weather data by Open-Meteo.com); the committed copy under examples/sample-data/ of kurtvalcorza/timesfm-forecasting-pipeline at a pinned commit'
 Path('outputs').mkdir(exist_ok=True)
 Path('data').mkdir(exist_ok=True)
 
@@ -222,9 +223,9 @@ print({'mase_scale': f"in-sample seasonal-naive MAE with season_length={config.s
 CELL_8 = _cell(
     """## 8. Zero-shot forecast with TimesFM
 
-*Core concept.* **Input:** the most recent `CONTEXT_LENGTH` points of each series, as plain numbers (TimesFM 2.5 needs no frequency label). **Model:** a 200M-parameter decoder-only transformer pretrained on a large corpus of time series; nothing is trained or tuned here, which is what *zero-shot* means. **Output:** for every series and future step, the **median** forecast (`prediction`, the model's quantile 0.5), the separate **mean** head, and the requested **quantiles** (`q0.1`, `q0.5`, `q0.9`).
+*Core concept.* **Input:** the most recent `CONTEXT_LENGTH` points of each series, as plain numbers (TimesFM 3.0 needs no frequency label). **Model:** a stacked mixing transformer (20 layers, model dimension 1280, 16 heads; the Hub lists 330.7M parameters) pretrained on a large corpus of time series, reading 32-point input patches and decoding 64-point output patches; nothing is trained or tuned here, which is what *zero-shot* means. **Output:** for every series and future step, the **median** forecast (`prediction`, the model's quantile 0.5, slot 4 of its nine quantile slots) and the requested **quantiles** (`q0.1`, `q0.5`, `q0.9`). TimesFM 3.0 has no separate mean head, so none is exported.
 
-**Quantiles are model quantiles.** The band between `q0.1` and `q0.9` is what the model's quantile head outputs for the nominal 80 % interval; it is **not** a calibrated prediction interval for this data until Section 9 measures how often the truth actually falls inside it. The point forecast is the median, never the mean: a skewed quantile spread makes the two differ, and the exported `mean` column shows by how much.
+**Quantiles are model quantiles.** The band between `q0.1` and `q0.9` is what the model's quantile head outputs for the nominal 80 % interval (sorted monotone by the upstream forecaster); it is **not** a calibrated prediction interval for this data until Section 9 measures how often the truth actually falls inside it. The point forecast is the median: with a skewed quantile spread it is not the centre of the band.
 
 **Prediction.** Will the model's first few steps hug the last observed value (like the naive forecast) or follow the daily cycle (like the seasonal baseline)? Will the band widen with the horizon?
 
@@ -234,7 +235,7 @@ CELL_8 = _cell(
 result = forecast(history_validation, config, pipe)
 forecast_frame = result.forecast
 print(forecast_frame.head(6).to_string(index=False))
-print({'effective_context': result.provenance['effective_context_length'], 'compiled': result.provenance['compiled'], 'point_semantics': result.provenance['point_forecast_semantics']})
+print({'effective_context': result.provenance['effective_context_length'], 'decode_settings': result.provenance['decode_settings'], 'point_semantics': result.provenance['point_forecast_semantics']})
 
 plot_id = validation.series_ids[0]
 hist_tail = split.history[split.history['series_id'] == plot_id].tail(3 * config.horizon)
@@ -333,7 +334,7 @@ print(future_report)""",
 CELL_12 = _cell(
     """## 12. Export the result bundle and reload it
 
-*Engineering / reproducibility.* `write_result_bundle` writes `outputs/__STEM___forecast.csv` (the held-out forecast with its quantiles), `__STEM___evaluation.json`, `__STEM___provenance.json` (model identity and revision status, the observed weight digest, the runtime versions, the configuration, the input manifest, the data source) and `__STEM___result.json`, which indexes the other files with their byte sizes and SHA-256 digests and carries the evaluation report. `reload_result_bundle` then reads the forecast **back from the files** after checking those digests, and `check_reload_parity` compares it with the in-memory forecast. Parity is a contract check — it proves the exported bundle reproduces what was evaluated, not that the forecast is good — so a mismatch stops the notebook.
+*Engineering / reproducibility.* `write_result_bundle` writes `outputs/__STEM___forecast.csv` (the held-out forecast with its quantiles), `__STEM___evaluation.json`, `__STEM___provenance.json` (model identity, licence terms and revision status, the observed weight digest, the runtime versions, the configuration, the input manifest, the data source) and `__STEM___result.json`, which indexes the other files with their byte sizes and SHA-256 digests and carries the evaluation report. `reload_result_bundle` then reads the forecast **back from the files** after checking those digests, and `check_reload_parity` compares it with the in-memory forecast. Parity is a contract check — it proves the exported bundle reproduces what was evaluated, not that the forecast is good — so a mismatch stops the notebook.
 
 **What to notice.** `reload_parity.ok` is `True`, and `sorted(os.listdir('outputs'))` lists every file this notebook produced.""",
     """provenance = build_provenance(pipe, config, history_validation, result, data_source=data_source, notebook_source=NOTEBOOK_SOURCE)
@@ -346,7 +347,7 @@ bundle_paths = write_result_bundle(
 reloaded_forecast, reloaded_result = reload_result_bundle('outputs', '__STEM__')
 reload_parity = check_reload_parity(forecast_frame, reloaded_forecast)
 print({'bundle': bundle_paths, 'reload_parity': {k: reload_parity[k] for k in ('rows', 'ok', 'tolerance', 'boundary')}})
-print({'model': {k: provenance['model'].get(k) for k in ('model_id', 'revision', 'resolved_revision', 'weights_sha256', 'weights_sha256_verified_against_manifest', 'license')}, 'device': provenance['device'], 'runtime': {k: provenance['runtime'].get(k) for k in ('python', 'timesfm', 'torch', 'cuda_available')}})
+print({'model': {k: provenance['model'].get(k) for k in ('model_id', 'revision', 'resolved_revision', 'weights_sha256', 'weights_sha256_verified_against_manifest', 'license', 'license_terms')}, 'device': provenance['device'], 'runtime': {k: provenance['runtime'].get(k) for k in ('python', 'timesfm', 'torch', 'cuda_available')}})
 print(sorted(os.listdir('outputs')))""",
 )
 
@@ -358,7 +359,7 @@ CLOSING = """## Interpretation and limits
 
 **What this evidence supports.** On the demonstrated sample the pipeline validated a real series into an input manifest, held out the future chronologically, scored three history-only baselines, produced a zero-shot median-and-quantile forecast from the pinned checkpoint, scored it with the same metrics, varied one thing (the context) in a controlled way, forecast beyond the data, and exported a bundle that reloads with parity. Whatever the ranking in your run, that ranking is the evidence — recorded, not asserted.
 
-**What it does not establish.** One holdout day per series on three grid cells over two weeks cannot rank forecasting models or show that a ranking is stable; the quantile band is the model's statement and its measured coverage on one day is not a calibration result; MASE and sMAPE do not characterise every error mode (a forecast that misses the timing of the daily peak can score well on sMAPE); TimesFM 2.5 does not take covariates on this path, so weather drivers, holidays or interventions are invisible to it; and nothing here shows how the model behaves on series with structural breaks, on counts near zero, or at horizons far beyond the sample's daily cycle. The checkpoint's pretraining mixture is described upstream and cannot be reconstructed here; weather from the same sources for earlier dates may be in it.
+**What it does not establish.** One holdout day per series on three grid cells over two weeks cannot rank forecasting models or show that a ranking is stable; the quantile band is the model's statement and its measured coverage on one day is not a calibration result; MASE and sMAPE do not characterise every error mode (a forecast that misses the timing of the daily peak can score well on sMAPE); the pipeline passes no covariates to TimesFM 3.0 (the upstream covariate inputs are not exposed on this path), so weather drivers, holidays or interventions are invisible to it; and nothing here shows how the model behaves on series with structural breaks, on counts near zero, or at horizons far beyond the sample's daily cycle. The checkpoint's pretraining mixture is described upstream and cannot be reconstructed here; weather from the same sources for earlier dates may be in it.
 
 **Carry to real data.** Read the seasonal-naive and naive rows on *your* series before the model's; if the seasonal rule wins, say so. Use a backtest over many forecast origins (rolling holdouts) before trusting a ranking, measure the band's coverage on that backtest before using it to size anything, and keep the horizon within what your decision needs. Set `SEASON_LENGTH` to your data's real period (7 for daily data with a weekly cycle, 12 for monthly data with a yearly cycle) or the MASE scale and the seasonal baseline will be wrong for it.
 
@@ -379,8 +380,8 @@ Successful execution proves that the recorded repository revision's package, car
 
 - **Section 1 stops with "needs a Linux x86_64 runtime".** The locked environment is built from manylinux wheels. Use Google Colab, Kaggle or a Linux Jupyter server; Windows and macOS kernels are not supported.
 - **Section 1 fails while downloading** (`uv` wheel, Python build or packages). The runtime needs PyPI and the python-build-standalone download; run the cell again once the network is back. A "size/SHA-256" or "does not match its digest" error means a file was altered: do not edit the cell, regenerate the notebook from the repository.
-- **"The isolated environment's Python process exited".** Usually the runtime ran out of memory. Restart the session and choose **Run all**; on CPU, close other notebooks first. The checkpoint needs about 1 GB of RAM in float32 plus the context.
-- **Out of disk or the checkpoint download stops.** The locked install (PyTorch with its CUDA libraries) and the 925 MB checkpoint need several GB of free space. Start a fresh runtime, or delete `dimer_isolated_env_*/` and `weights/` from an earlier attempt.
+- **"The isolated environment's Python process exited".** Usually the runtime ran out of memory. Restart the session and choose **Run all**; on CPU, close other notebooks first. The checkpoint needs about 1.3 GB of RAM in float32 plus the context.
+- **Out of disk or the checkpoint download stops.** The locked install (PyTorch with its CUDA libraries) and the 1.32 GB checkpoint need several GB of free space. Start a fresh runtime, or delete `dimer_isolated_env_*/` and `weights/` from an earlier attempt.
 - **A size or digest mismatch in Section 3 or 4.** A download was incomplete or altered; the notebook refuses it rather than continuing. Run the cell again; never edit the manifest or the sample digest. A `config.json` mismatch means the Hub served a different checkpoint than the pinned one — stop and report it.
 - **Section 3 reports `digests_pending: ['model.safetensors']`.** Expected until the maintainer pins the weight digest and the immutable commit after the first hosted run; the observed digest and the resolved commit are printed and exported for exactly that purpose.
 - **BYOD is refused in Section 5.** The message names the file and the rule: `[REQUIRED_COLUMNS]` (set the column fields), `[TIMESTAMP_DUPLICATE]`, `[FREQUENCY_GAP]` / `[FREQUENCY_IRREGULAR]`, `[VALUE_MISSING]` / `[VALUE_NUMERIC]`, `[MIN_HISTORY]` (fewer than `HORIZON + 16` rows), `[FREQUENCY_MIXED]`. Fix the file or the policy fields and choose **Run after** from Section 4. An empty or cancelled upload asks you to choose a file or set `BYOD_PATH`.
@@ -402,7 +403,7 @@ Successful execution proves that the recorded repository revision's package, car
 - **sMAPE:** symmetric mean absolute percentage error, in percent.
 - **Quantile (pinball) loss:** the loss that a correct quantile forecast minimises; lower is better.
 - **Model quantiles / coverage:** the quantile head's outputs (q0.1 … q0.9) and the measured share of truth points inside a band; a model band is not a calibrated interval until coverage is measured on enough data.
-- **Median vs mean:** the point forecast here is the median (q0.5); the mean head is exported separately and differs when the quantile spread is skewed.
+- **Median as the point forecast:** the point forecast here is the median (q0.5, slot 4 of the model's nine quantile slots); TimesFM 3.0 has no mean head, and with a skewed spread the median is not the centre of the band.
 - **Input manifest:** the machine-readable record of what was validated, under which rules, ceilings and policies, and what changed.
 - **Result bundle / reload parity:** the exported CSV and JSON files indexed by digest in `result.json`, and the check that the bundle reproduces the in-memory forecast.
 
@@ -411,7 +412,7 @@ Successful execution proves that the recorded repository revision's package, car
 - Das, A., Kong, W., Sen, R., & Zhou, Y. (2024). A decoder-only foundation model for time-series forecasting. *Proceedings of the 41st International Conference on Machine Learning (ICML 2024)*. https://arxiv.org/abs/2310.10688
 - Hyndman, R. J., & Koehler, A. B. (2006). Another look at measures of forecast accuracy. *International Journal of Forecasting, 22*(4), 679–688. https://doi.org/10.1016/j.ijforecast.2006.03.001
 - Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: principles and practice* (3rd ed.). OTexts. https://otexts.com/fpp3/
-- Google Research. (2025). TimesFM 2.5 200M PyTorch checkpoint. Hugging Face Hub. https://huggingface.co/google/timesfm-2.5-200m-pytorch
+- Google Research. (2026). TimesFM 3.0 PyTorch checkpoint (TimesFM Non-Commercial License v1.0). Hugging Face Hub. https://huggingface.co/google/timesfm-3.0-pytorch
 - Open-Meteo. (2026). Historical weather API. https://open-meteo.com/ (data: CC BY 4.0)
 """
 
@@ -430,7 +431,7 @@ GUIDED_OPENING = [
 
 **Roadmap.** 4 obtain the sample (or your CSV) → 5 validate into an input manifest, see a refusal → 6 split chronologically → 7 three baselines → 8 **zero-shot forecast** with point and quantile output → 9 evaluate beside the baselines (verdicts recorded, never asserted) → 10 **change one thing: the context length** → 11 forecast beyond the data → 12 export and reload → conclude. A fast path is the default path: nothing is optional until Section 10, and Section 10 is bounded.
 
-**Input → Model → Output.** *Input:* a long-format table — timestamp, numeric value, optional series id — sampled at one interval. *Model:* TimesFM 2.5 (200M parameters, decoder-only transformer pretrained on time series) reading the most recent `CONTEXT_LENGTH` points of each series, with nothing trained here. *Output:* for each series and each of `HORIZON` future steps, a median point forecast, a mean, and the model quantiles q0.1 / q0.5 / q0.9; beside it, the same metrics for three history-only baselines, an input manifest, an evaluation report and a result bundle with provenance.
+**Input → Model → Output.** *Input:* a long-format table — timestamp, numeric value, optional series id — sampled at one interval. *Model:* TimesFM 3.0 (a stacked mixing transformer pretrained on time series; the Hub lists 330.7M parameters; weights under a non-commercial, non-production licence) reading the most recent `CONTEXT_LENGTH` points of each series, with nothing trained here. *Output:* for each series and each of `HORIZON` future steps, a median point forecast and the model quantiles q0.1 / q0.5 / q0.9; beside it, the same metrics for three history-only baselines, an input manifest, an evaluation report and a result bundle with provenance.
 
 **Three ideas to hold on to.** *Zero-shot* describes this notebook's task — no training on these series — not the model's ignorance of weather in general. *Baselines come first*: a seasonal rule of thumb is the bar, and the notebook records whether the model clears it rather than assuming it. *Quantiles are the model's statements*: the band's measured coverage on the holdout is what tells you how to read it.""",
     ),
@@ -462,7 +463,7 @@ TEMPLATE = {
     ),
     "run_all": (
         "Selecting **Run all** in a fresh supported runtime builds the isolated hash-locked environment (nothing is "
-        "installed into the kernel, no restart), stages the pinned TimesFM 2.5 checkpoint (925 MB safetensors) and "
+        "installed into the kernel, no restart), stages the pinned TimesFM 3.0 checkpoint (1.32 GB safetensors, non-commercial weights licence) and "
         "checks its size and config digest, fetches the digest-pinned Open-Meteo sample (31 KB, no credential), "
         "validates it into an input manifest and shows one named refusal, holds out the last 24 hours of each series "
         "chronologically, scores naive, seasonal-naive and exponential-smoothing baselines, runs the zero-shot forecast "
@@ -481,7 +482,7 @@ TEMPLATE = {
     ),
     "pipeline_class": "LoadedModel",
     "model_load": "load_pinned_model(weights_dir=WEIGHTS_DIR)",
-    "weights_key": "timesfm-2.5-200m-pytorch",
+    "weights_key": "timesfm-3.0-pytorch",
     "modules": ["errors.py", "config.py", "data.py", "model.py", "forecasting.py", "evaluation.py", "provenance.py"],
     "entry_module": "model.py",
     "identity_names": {},
@@ -490,14 +491,15 @@ TEMPLATE = {
     "badges": [
         ("GitHub", "https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white", f"https://github.com/kurtvalcorza/{REPO}"),
         ("Open In Colab", "https://colab.research.google.com/assets/colab-badge.svg", f"https://colab.research.google.com/github/kurtvalcorza/{REPO}/blob/main/tutorials/{STEM}_colab.ipynb"),
-        ("Hugging Face", "https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-google%2Ftimesfm--2.5--200m--pytorch-ffcc4d?style=flat", "https://huggingface.co/google/timesfm-2.5-200m-pytorch"),
+        ("Hugging Face", "https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-google%2Ftimesfm--3.0--pytorch-ffcc4d?style=flat", "https://huggingface.co/google/timesfm-3.0-pytorch"),
         ("Upstream", "https://img.shields.io/badge/Upstream-google--research%2Ftimesfm-181717?style=flat&logo=github&logoColor=white", "https://github.com/google-research/timesfm"),
         ("arXiv", "https://img.shields.io/badge/arXiv-2310.10688-b31b1b.svg", "https://arxiv.org/abs/2310.10688"),
-        ("License: Apache-2.0", "https://img.shields.io/badge/License-Apache--2.0-blue.svg", "https://opensource.org/licenses/Apache-2.0"),
+        ("Code: Apache-2.0", "https://img.shields.io/badge/Code-Apache--2.0-blue.svg", f"https://github.com/kurtvalcorza/{REPO}/blob/main/LICENSE"),
+        ("Weights: non-commercial", "https://img.shields.io/badge/Weights-TimesFM%20Non--Commercial%20v1.0-red.svg", "https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE"),
     ],
     "capability": (
-        "zero-shot univariate time-series forecasting over one or many independent series with the pinned TimesFM 2.5 "
-        "200M PyTorch checkpoint: a median point forecast, a mean, and model quantiles from the trained decile grid, "
+        "zero-shot univariate time-series forecasting over one or many independent series with the pinned TimesFM 3.0 "
+        "PyTorch checkpoint (non-commercial weights): a median point forecast and model quantiles from the trained decile grid, "
         "evaluated chronologically against naive, seasonal-naive and exponential-smoothing baselines with MASE, sMAPE "
         "and quantile loss"
     ),
@@ -505,14 +507,22 @@ TEMPLATE = {
         "**The question this notebook answers on one real series:** can a pretrained time-series foundation model, given "
         "nothing but the recent history, forecast the next day of hourly temperature in three Philippine cities better "
         "than repeating yesterday? The answer is measured, recorded and interpreted; it is not assumed either way.\n\n"
-        "**Zero-shot does not mean untrained.** TimesFM 2.5 was pretrained by Google Research on a large corpus of time "
+        "**Zero-shot does not mean untrained.** TimesFM 3.0 was pretrained by Google Research on a large corpus of time "
         "series. *Zero-shot* describes this notebook's task: the model forecasts these series without any training on "
         "them. Everything the model knows about daily cycles it learned elsewhere.\n\n"
         "**The point forecast is the median, and the band is a model statement.** The pipeline exports the model's "
-        "quantile 0.5 as `prediction`, the separate mean head as `mean`, and the requested deciles as `q0.1` / `q0.5` / "
-        "`q0.9`. The q0.1–q0.9 band is what the model's quantile head emits for a nominal 80 % interval; Section 9 "
-        "measures how often the truth falls inside it, and only that measurement says how to read it. No decision "
-        "threshold is shipped.\n\n"
+        "quantile 0.5 (slot 4 of its nine quantile slots) as `prediction` and the requested deciles as `q0.1` / `q0.5` / "
+        "`q0.9`; TimesFM 3.0 has no mean head. The q0.1–q0.9 band is what the model's quantile head emits for a nominal "
+        "80 % interval; Section 9 measures how often the truth falls inside it, and only that measurement says how to "
+        "read it. No decision threshold is shipped.\n\n"
+        "**Weights licence.** The TimesFM 3.0 weights that Section 3 downloads are distributed by Google LLC under the "
+        "*TimesFM Non-Commercial License v1.0* (`license: other` on the Hub): **non-commercial and non-production use "
+        "only** — testing, evaluation and research not tied to commercial gain, production deployment or revenue "
+        "generation — with no redistribution of the model or of derivatives, and a commercial licence required for "
+        "anything else. Running this notebook for a client deliverable, a paid product, or any end-user-facing or "
+        "production system is outside that licence. The notebook's code and the pipeline package are Apache-2.0; the "
+        "sample is CC BY 4.0. If the restriction does not fit your use, the repository's TimesFM 2.5 build (Apache-2.0 "
+        "weights) is the fallback; see the repository README.\n\n"
         "**Model revision status.** The checkpoint is pinned by repository id, file names, byte sizes and the digest of "
         "its `config.json`; its immutable commit and the digest of `model.safetensors` are to be confirmed on the first "
         "hosted run (the Hub was unreachable when the pin was written). Section 3 prints `digests_pending` and the "
@@ -527,26 +537,38 @@ TEMPLATE = {
         "validation, forecast and export contract to your own CSV and read its refusals."
     ),
     "exclusions": (
-        "covariates (past-only or known-future regressors; TimesFM 2.5's XReg path is not exposed), multivariate joint "
+        "covariates (past-only or known-future regressors; TimesFM 3.0's covariate inputs are not exposed), multivariate joint "
         "forecasting, fine-tuning or any training, anomaly detection, imputation as a product feature (the pipeline's "
         "interpolation is a reported validation policy, not a model), probability calibration or conformal intervals, "
-        "rolling-origin backtesting, TimesFM 3.0 (whose weights carry a separate non-commercial licence), and any claim "
-        "that one holdout day on three series stands in for your data. The repository exposes none of these."
+        "rolling-origin backtesting, multivariate variate attention across series (each series is forecast "
+        "independently), and any claim that one holdout day on three series stands in for your data. The repository "
+        "exposes none of these."
     ),
     "prerequisites": [
         "- **Learner:** basic Python and Colab familiarity; no prior forecasting experience. New terms (horizon, context, holdout, baseline, MASE, quantile) are explained where they are first used and collected in the Glossary.",
-        "- **Runtime:** a fresh **Linux x86_64** runtime — Google Colab, Kaggle or Linux Jupyter. Section 1 builds its own Python 3.12.12 environment from a hash-locked list of manylinux wheels, so the kernel's own Python version does not matter, and a Windows or macOS kernel is not supported (Section 1 stops with that message). The default path runs on CPU in float32 and uses CUDA automatically when available. The locked install (PyTorch 2.14.0 with its CUDA libraries) and the 925 MB checkpoint are the large downloads. No hosted run is recorded yet, so no runtime figure is given; the model stages on this sample are three series of 312 points at a 24-step horizon, which is small for a 200M-parameter model on CPU (an expectation, not a measurement).",
-        "- **Data contract:** one CSV, long format — a timestamp column (ISO-8601 or any pandas-parseable format), a finite numeric value column, and optionally a series-id column; one sampling interval per file (fixed, such as hourly or daily, or a calendar interval such as monthly); no duplicate timestamps within a series; at least `HORIZON + 16` rows per series (40 with the default horizon) and at least 3 rows to infer the interval; at most 1,000 series and 2,000,000 rows; histories longer than 16,384 points are truncated to their most recent points with a report. Missing values and skipped grid points are refused by default and may instead be interpolated / filled with a report (`NAN_POLICY`, `GAP_POLICY`; at most 20 % of a series may be interpolated). Section 5 checks all of this before any model call and names the file and the rule it refuses.",
+        "- **Weights licence (read before Section 3):** the pinned `google/timesfm-3.0-pytorch` weights are under the *TimesFM Non-Commercial License v1.0* — **non-commercial and non-production use only**, no redistribution of the model or of derivatives, a commercial licence from Google LLC required for any other use. Downloading them in Section 3 means accepting those terms. The pipeline code is Apache-2.0 and the sample is CC BY 4.0; the licence text is in the checkpoint repository's `LICENSE` file.",
+        "- **Runtime:** a fresh **Linux x86_64** runtime — Google Colab, Kaggle or Linux Jupyter. Section 1 builds its own Python 3.12.12 environment from a hash-locked list of manylinux wheels, so the kernel's own Python version does not matter, and a Windows or macOS kernel is not supported (Section 1 stops with that message). The default path runs on CPU in float32 and uses CUDA automatically when available. The locked install (PyTorch 2.14.0 with its CUDA libraries) and the 1.32 GB checkpoint are the large downloads. No hosted run is recorded yet, so no runtime figure is given; the model stages on this sample are three series of 312 points at a 24-step horizon, which is small for a 330M-parameter model on CPU (an expectation, not a measurement).",
+        "- **Data contract:** one CSV, long format — a timestamp column (ISO-8601 or any pandas-parseable format), a finite numeric value column, and optionally a series-id column; one sampling interval per file (fixed, such as hourly or daily, or a calendar interval such as monthly); no duplicate timestamps within a series; at least `HORIZON + 16` rows per series (40 with the default horizon) and at least 3 rows to infer the interval; at most 1,000 series and 2,000,000 rows; histories longer than 15,360 points (the model's context limit) are truncated to their most recent points with a report. Missing values and skipped grid points are refused by default and may instead be interpolated / filled with a report (`NAN_POLICY`, `GAP_POLICY`; at most 20 % of a series may be interpolated). Section 5 checks all of this before any model call and names the file and the rule it refuses.",
         "- **Validation is structural, not semantic:** nothing checks that the values mean what you think, that the series is stationary, or that the season length you set is the data's real period; a wrong `SEASON_LENGTH` makes the seasonal baseline and the MASE scale wrong without any error.",
         "- **Privacy:** do not upload confidential or restricted data to a hosted runtime unless you are authorised to process it there — operational telemetry or sales figures may be exactly that. The default path uploads nothing.",
     ],
     "external_access": (
-        "the Hugging Face Hub, to fetch the pinned `{MODEL_ID}` files (~{total_mb:.0f} MB in total) at the ref `{MODEL_REVISION}` "
-        "(the immutable commit and the weight digest are to be confirmed on the first hosted run, which prints and exports what "
-        "the Hub served), and `raw.githubusercontent.com` for the pinned sample (`openmeteo_ph_hourly_temperature.csv`, "
-        f"{SAMPLE_BYTES:,} bytes, SHA-256 `{SAMPLE_SHA256[:8]}…`, at a pinned commit of `kurtvalcorza/chronos-2-forecasting-pipeline`; "
-        "Open-Meteo, CC BY 4.0), refused on any mismatch before it is read. No credentials are required; nothing is installed "
-        "from this repository"
+        "the Hugging Face Hub, to fetch the pinned `{MODEL_ID}` files (~{total_mb:.0f} MB in total; non-commercial weights "
+        "licence, see above) at the ref `{MODEL_REVISION}` (the immutable commit and the weight digest are to be confirmed on "
+        "the first hosted run, which prints and exports what the Hub served), and `raw.githubusercontent.com` for the pinned "
+        f"sample (`openmeteo_ph_hourly_temperature.csv`, {SAMPLE_BYTES:,} bytes, SHA-256 `{SAMPLE_SHA256[:8]}…`, the copy "
+        f"committed under `examples/sample-data/` of this repository at commit `{SAMPLE_COMMIT[:12]}…`; Open-Meteo, CC BY 4.0), "
+        "refused on any mismatch before it is read. The sample is data, not code: nothing is installed from this repository "
+        "and no credentials are required"
+    ),
+    "weights_licence_note": (
+        "**Weights licence — read before running the next cell.** The cell downloads `google/timesfm-3.0-pytorch`, whose "
+        "weights Google LLC distributes under the *TimesFM Non-Commercial License v1.0*: **non-commercial and non-production "
+        "use only** (testing, evaluation and research not tied to commercial gain, production deployment or revenue "
+        "generation), no use in end-user-facing or production systems, no redistribution of the model or of derivatives, "
+        "and a commercial licence required for anything else. Downloading the weights means accepting those terms; the "
+        "run records them in `resolved-revision.json` and in the exported provenance. The code in this notebook is "
+        "Apache-2.0 and the sample is CC BY 4.0."
     ),
     "guided": {"opening": [cell["md"] for cell in GUIDED_OPENING]},
     "cells": [CELL_4, CELL_5, CELL_6, CELL_7, CELL_8, CELL_9, CELL_10, CELL_11, CELL_12],

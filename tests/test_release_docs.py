@@ -47,8 +47,9 @@ def test_status_is_candidate_with_no_hosted_run() -> None:
 def test_readme_has_the_colab_link_and_names_the_boundary() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "https://colab.research.google.com/github/kurtvalcorza/timesfm-forecasting-pipeline/blob/main/tutorials/timesfm_forecasting_colab.ipynb" in readme
-    assert "google/timesfm-2.5-200m-pytorch" in readme
-    assert "non-commercial" in readme  # the 3.0 licence boundary is explained
+    assert "google/timesfm-3.0-pytorch" in readme
+    assert "non-commercial" in readme and "non-production" in readme  # the 3.0 weights licence is stated
+    assert "google/timesfm-2.5-200m-pytorch" in readme  # the Apache-2.0 fallback build is named
 
 
 def test_model_card_states_metrics_and_quantile_semantics() -> None:

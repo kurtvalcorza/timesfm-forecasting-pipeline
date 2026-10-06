@@ -1,22 +1,31 @@
-"""Pinned TimesFM 2.5 checkpoint: identity, staging, integrity and loading.
+"""Pinned TimesFM 3.0 checkpoint: identity, staging, integrity and loading.
 
-Only ``google/timesfm-2.5-200m-pytorch`` is accepted. Its files are listed in the committed
-manifest (``weights/timesfm-2.5-200m-pytorch/dimer-base-manifest.json``) with byte sizes and,
-where established, SHA-256 digests. ``stage_missing_files`` fetches absent entries from the
-Hugging Face Hub, ``verify_snapshot`` re-checks every file against the manifest, and
-``load_pinned_model`` loads the verified safetensors file through the pinned ``timesfm``
-package. Pickle-format weights are refused.
+Only ``google/timesfm-3.0-pytorch`` is accepted. Its files are listed in the committed manifest
+(``weights/timesfm-3.0-pytorch/dimer-base-manifest.json``) with byte sizes and, where established,
+SHA-256 digests. ``stage_missing_files`` fetches absent entries from the Hugging Face Hub,
+``verify_snapshot`` re-checks every file against the manifest, and ``load_pinned_model`` loads the
+verified snapshot directory through the ``timesfm3`` package of the pinned ``timesfm`` distribution
+(``TimesFM3Forecaster``, which reads the staged ``config.json`` and ``model.safetensors`` and never
+consults the Hub). Pickle-format weights are refused.
+
+Weights licence
+---------------
+The TimesFM 3.0 weights are distributed under the *TimesFM Non-Commercial License v1.0*
+(``license: other`` on the Hub, ``LICENSE`` in the checkpoint repository): non-commercial and
+non-production use only, no redistribution of the model or of derivatives. The pipeline code is
+Apache-2.0; the weights are downloaded at run time and never committed. ``MODEL_LICENSE_TERMS``
+carries the restriction into every provenance record.
 
 Revision status
 ---------------
-The Hub was not reachable from the build environment, so the immutable commit of the checkpoint
-and the SHA-256 of ``model.safetensors`` could not be resolved. ``MODEL_REVISION`` therefore
-names the ref ``main`` and ``MODEL_REVISION_STATUS`` says so; the first hosted run records the
-commit the Hub served (``resolved_revision``) and the observed weight digest, and the maintainer
+The Hub's commit API was not reachable from the build environment, so the immutable commit of the
+checkpoint and the SHA-256 of ``model.safetensors`` could not be resolved. ``MODEL_REVISION``
+therefore names the ref ``main`` and ``MODEL_REVISION_STATUS`` says so; the first hosted run records
+the commit the Hub served (``resolved_revision``) and the observed weight digest, and the maintainer
 pins both in this module and the manifest. The file *names* and *byte sizes* and the digest of
-``config.json`` were verified against the Hub's file listing (see the manifest's ``verification``
-block). ``torch`` and ``timesfm`` are imported lazily so that the rest of the package works
-without them.
+``config.json`` were verified against the Hub's file listing and file contents (see the manifest's
+``verification`` block). ``torch`` and ``timesfm3`` are imported lazily so that the rest of the
+package works without them.
 """
 
 from __future__ import annotations
@@ -26,13 +35,13 @@ import json
 import os
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from .config import MAX_HORIZON, TRAINED_QUANTILES, ForecastConfig
+from .config import MAX_CONTEXT_POINTS, MAX_HORIZON, MEDIAN_SLOT, TRAINED_QUANTILES, ForecastConfig
 from .errors import HubUnavailableError, ModelIntegrityError, ModelSourceError
 
 __all__ = [
@@ -41,6 +50,8 @@ __all__ = [
     "MODEL_REVISION_STATUS",
     "MODEL_LICENSE",
     "MODEL_LICENSE_SOURCE",
+    "MODEL_LICENSE_TERMS",
+    "MODEL_LICENSE_URL",
     "MODEL_KEY",
     "MODEL_URL",
     "MANIFEST_NAME",
@@ -50,6 +61,9 @@ __all__ = [
     "PINNED_WEIGHTS_BYTES",
     "PINNED_CONFIG_SHA256",
     "REFUSED_WEIGHT_SUFFIXES",
+    "EXPECTED_CONFIG",
+    "EXPECTED_TRANSFORMER",
+    "DECODE_SETTINGS",
     "LoadedModel",
     "check_model_source",
     "read_manifest",
@@ -59,40 +73,65 @@ __all__ = [
     "sha256_file",
 ]
 
-MODEL_ID = "google/timesfm-2.5-200m-pytorch"
+MODEL_ID = "google/timesfm-3.0-pytorch"
 MODEL_REVISION = "main"
 MODEL_REVISION_STATUS = (
-    "unresolved: revision digest to be confirmed on the first hosted run (the Hub was not reachable "
-    "when this pin was written; the run records the commit served and the model.safetensors SHA-256)"
+    "unresolved: revision digest to be confirmed on the first hosted run (the Hub's commit API was not "
+    "reachable when this pin was written; the run records the commit served and the model.safetensors SHA-256)"
 )
-MODEL_LICENSE = "apache-2.0"
+#: The Hub front matter says ``license: other`` with ``license_name: timesfm-non-commercial-license-v1.0``.
+MODEL_LICENSE = "timesfm-non-commercial-license-v1.0"
 MODEL_LICENSE_SOURCE = (
-    "Hugging Face model card front matter `license: apache-2.0` of google/timesfm-2.5-200m-pytorch; "
-    "google-research/timesfm README: weights up to version 2.5 are Apache-2.0 (3.0 weights are not)"
+    "Hugging Face model card front matter of google/timesfm-3.0-pytorch: `license: other`, "
+    "`license_name: timesfm-non-commercial-license-v1.0`, `license_link: LICENSE` (7,270-byte LICENSE file in "
+    "the checkpoint repository, read in full on 2026-10-06)"
 )
-MODEL_KEY = "timesfm-2.5-200m-pytorch"
+MODEL_LICENSE_TERMS = (
+    "non-commercial and non-production use only (testing, evaluation and research not tied to commercial gain, "
+    "production deployment or revenue generation); no use in end-user-facing or production systems; no "
+    "distribution of the model or of derivatives; a commercial licence from Google LLC is required for any "
+    "other use"
+)
+MODEL_LICENSE_URL = "https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE"
+MODEL_KEY = "timesfm-3.0-pytorch"
 MODEL_URL = f"https://huggingface.co/{MODEL_ID}"
 MANIFEST_NAME = "dimer-base-manifest.json"
 DEFAULT_WEIGHTS_DIR = Path(__file__).resolve().parents[2] / "weights" / MODEL_KEY
 WEIGHTS_FILENAME = "model.safetensors"
 CONFIG_FILENAME = "config.json"
 #: Byte size of model.safetensors as listed by the Hub (verified); its SHA-256 is pending.
-PINNED_WEIGHTS_BYTES = 925_181_104
-#: SHA-256 of the 475-byte config.json, computed from the Hub-served text (verified).
-PINNED_CONFIG_SHA256 = "cd3315b760d5cc7e278d7afdf41b897031ced888fc6c115bd9b3ac0ea2c47408"
+PINNED_WEIGHTS_BYTES = 1_322_898_824
+#: SHA-256 of the 1,273-byte config.json, computed from the Hub-served text (verified).
+PINNED_CONFIG_SHA256 = "ff17bbc07b792c5a904cca265b8468579d736a4fe84981da25eb871b0a125bc6"
 REFUSED_WEIGHT_SUFFIXES = frozenset({".bin", ".pt", ".pth", ".ckpt", ".pkl", ".pickle"})
-#: Architecture facts the loader asserts after reading config.json (MOD1/MOD3).
+#: Architecture facts the loader asserts after reading config.json (top-level keys).
 EXPECTED_CONFIG = {
-    "model_type": "timesfm",
-    "context_length": 16384,
-    "patch_length": 32,
-    "horizon_length": 128,
-    "quantile_horizon_length": 1024,
+    "input_patch_len": 32,
+    "output_patch_len": 64,
     "quantiles": list(TRAINED_QUANTILES),
+    "use_variate_attention": True,
+    "use_iterative_cpm_revin": True,
+    "use_linear_detrending": True,
+    "use_stitching": True,
+}
+#: Architecture facts asserted under ``transformer_config`` (``num_layers``) and ``transformer_config.transformer``.
+EXPECTED_TRANSFORMER = {"num_layers": 20, "model_dims": 1280, "num_heads": 16, "use_rope_var": False}
+#: Upstream ``TimesFM3Forecaster.predict_batch`` options the pipeline passes on every call. ``sort_quantiles``
+#: makes the nine slots monotone (the upstream default); the three transforms are off so the output is the
+#: model's own quantile head, and the batch size is the upstream default.
+DECODE_SETTINGS = {
+    "per_core_batch_size": 4,
+    "return_quantiles": True,
+    "sort_quantiles": True,
+    "use_symmetric_averaging": False,
+    "make_positive": False,
+    "use_znorm": False,
+    "padding_mode": "none",
 }
 
-_PATCH = 32
-_OUTPUT_PATCH = 128
+_INPUT_PATCH = 32
+_OUTPUT_PATCH = 64
+_N_SLOTS = len(TRAINED_QUANTILES)
 
 
 def _is_digest(value: Any) -> bool:
@@ -167,7 +206,8 @@ def stage_missing_files(
 
     Returns the relative paths fetched. Also writes ``resolved-revision.json`` next to the
     manifest with whatever the downloader reported, so a hosted run leaves the commit it
-    actually served on disk for the maintainer to pin.
+    actually served on disk for the maintainer to pin. Downloading the weights accepts the
+    non-commercial licence recorded in ``MODEL_LICENSE_TERMS``; the record repeats it.
     """
     root = Path(path) if path is not None else DEFAULT_WEIGHTS_DIR
     manifest = read_manifest(root)
@@ -177,7 +217,7 @@ def stage_missing_files(
     if not allow_download:
         raise FileNotFoundError(
             f"snapshot at {root} is missing {missing}; pass allow_download=True to fetch them from "
-            f"{MODEL_URL} at {MODEL_REVISION!r}"
+            f"{MODEL_URL} at {MODEL_REVISION!r} (weights licence: {MODEL_LICENSE}, {MODEL_LICENSE_TERMS})"
         )
     fetch = downloader or _hub_download
     records = []
@@ -192,6 +232,8 @@ def stage_missing_files(
                 "revision_status": MODEL_REVISION_STATUS,
                 "resolved_revision": next((r for r in resolved if r), None),
                 "fetched": missing,
+                "license": MODEL_LICENSE,
+                "license_terms": MODEL_LICENSE_TERMS,
             },
             indent=2,
         )
@@ -199,6 +241,21 @@ def stage_missing_files(
         encoding="utf-8",
     )
     return missing
+
+
+def _config_mismatches(config: dict[str, Any]) -> list[str]:
+    """Pinned architecture values that the staged ``config.json`` does not carry."""
+    out = []
+    for key, value in EXPECTED_CONFIG.items():
+        if config.get(key) != value:
+            out.append(f"{key}={config.get(key)!r} (pinned {value!r})")
+    transformer = config.get("transformer_config") or {}
+    inner = transformer.get("transformer") or {} if isinstance(transformer, dict) else {}
+    for key, value in EXPECTED_TRANSFORMER.items():
+        got = transformer.get(key) if key == "num_layers" else inner.get(key)
+        if got != value:
+            out.append(f"transformer_config.{key}={got!r} (pinned {value!r})")
+    return out
 
 
 def verify_snapshot(snapshot_path: str | os.PathLike[str]) -> dict[str, Any]:
@@ -244,12 +301,12 @@ def verify_snapshot(snapshot_path: str | os.PathLike[str]) -> dict[str, Any]:
         files.append({"path": entry["path"], "bytes": actual_bytes, "sha256": observed, "verified": True})
     if (root / CONFIG_FILENAME).is_file():
         config = json.loads((root / CONFIG_FILENAME).read_text(encoding="utf-8"))
-        for key, value in EXPECTED_CONFIG.items():
-            if config.get(key) != value:
-                raise ModelIntegrityError(
-                    f"{CONFIG_FILENAME} {key}={config.get(key)!r} differs from the pinned architecture "
-                    f"({value!r}); this is not the TimesFM 2.5 200M checkpoint"
-                )
+        mismatches = _config_mismatches(config)
+        if mismatches:
+            raise ModelIntegrityError(
+                f"{CONFIG_FILENAME} differs from the pinned architecture: {'; '.join(mismatches)}; this is not "
+                "the TimesFM 3.0 PyTorch checkpoint"
+            )
     resolved_file = root / "resolved-revision.json"
     resolved = None
     if resolved_file.is_file():
@@ -259,6 +316,7 @@ def verify_snapshot(snapshot_path: str | os.PathLike[str]) -> dict[str, Any]:
         "revision": MODEL_REVISION,
         "revision_status": MODEL_REVISION_STATUS,
         "resolved_revision": resolved,
+        "license": MODEL_LICENSE,
         "files": files,
         "digests_pending": pending,
         "totalBytes": sum(int(f["bytes"]) for f in files),
@@ -267,7 +325,7 @@ def verify_snapshot(snapshot_path: str | os.PathLike[str]) -> dict[str, Any]:
 
 @dataclass
 class LoadedModel:
-    """The pinned TimesFM model, compiled for one (context, horizon) envelope at a time."""
+    """The pinned TimesFM 3.0 forecaster: one upstream ``TimesFM3Forecaster`` and its identity record."""
 
     model: Any
     identity: dict[str, Any]
@@ -275,61 +333,47 @@ class LoadedModel:
     dtype: str
     source: str
     snapshot: dict[str, Any]
-    compiled_for: tuple[int, int] | None = None
-    _config_cache: dict[tuple[int, int], Any] = field(default_factory=dict, repr=False)
 
     @property
     def trained_quantiles(self) -> tuple[float, ...]:
         return TRAINED_QUANTILES
 
-    def compile_for(self, config: ForecastConfig) -> dict[str, Any]:
-        """Compile the decode function for ``config`` (rounded to the model's patch sizes)."""
-        import timesfm
+    def decode_settings(self, config: ForecastConfig) -> dict[str, Any]:
+        """The upstream options one ``predict`` call uses, plus the patch envelope the request rounds to.
 
-        max_context = -(-config.context_length // _PATCH) * _PATCH
-        max_horizon = -(-config.horizon // _OUTPUT_PATCH) * _OUTPUT_PATCH
-        key = (max_context, max_horizon)
-        if self.compiled_for != key:
-            self.model.compile(
-                timesfm.ForecastConfig(
-                    max_context=max_context,
-                    max_horizon=max_horizon,
-                    normalize_inputs=True,
-                    use_continuous_quantile_head=True,
-                    force_flip_invariance=True,
-                    infer_is_positive=True,
-                    fix_quantile_crossing=True,
-                    per_core_batch_size=32,
-                )
-            )
-            self.compiled_for = key
+        TimesFM 3.0 needs no compile step: the forecaster pads each batch's context up to a multiple of
+        the 32-point input patch (capped at the 15,360-point context limit) and decodes the horizon in
+        64-point output patches, so these values are recorded for provenance, not applied by the pipeline.
+        """
         return {
-            "max_context": max_context,
-            "max_horizon": max_horizon,
-            "normalize_inputs": True,
-            "use_continuous_quantile_head": True,
-            "force_flip_invariance": True,
-            "infer_is_positive": True,
-            "fix_quantile_crossing": True,
+            **DECODE_SETTINGS,
+            "context_patch_envelope": min(-(-config.context_length // _INPUT_PATCH) * _INPUT_PATCH, MAX_CONTEXT_POINTS),
+            "horizon_patch_envelope": -(-config.horizon // _OUTPUT_PATCH) * _OUTPUT_PATCH,
+            "median_quantile_index": MEDIAN_SLOT,
+            "input_patch_len": _INPUT_PATCH,
+            "output_patch_len": _OUTPUT_PATCH,
+            "context_limit": MAX_CONTEXT_POINTS,
         }
 
     def predict(self, inputs: list[np.ndarray], horizon: int, config: ForecastConfig) -> tuple[np.ndarray, np.ndarray]:
-        """Zero-shot forecast: ``(point, quantiles)`` of shapes ``(n, horizon)`` and ``(n, horizon, 10)``.
+        """Zero-shot forecast: ``(point, quantiles)`` of shapes ``(n, horizon)`` and ``(n, horizon, 9)``.
 
-        ``point`` is the model's median (``quantiles[..., 5]``); ``quantiles[..., 0]`` is the mean
-        head and ``quantiles[..., 1:]`` are the deciles 0.1..0.9.
+        ``quantiles[..., k]`` is the model's quantile ``TRAINED_QUANTILES[k]`` (0.1 .. 0.9) and ``point``
+        is its median, ``quantiles[..., MEDIAN_SLOT]`` (slot 4). There is no separate mean head in
+        TimesFM 3.0.
         """
         if horizon > MAX_HORIZON:
             raise ValueError(f"horizon {horizon} exceeds MAX_HORIZON={MAX_HORIZON}")
-        self.compile_for(config)
         arrays = [np.asarray(x, dtype=np.float32) for x in inputs]
-        point, quantiles = self.model.forecast(horizon=horizon, inputs=arrays)
-        point = np.asarray(point, dtype=float)
-        quantiles = np.asarray(quantiles, dtype=float)
-        if point.shape != (len(arrays), horizon) or quantiles.shape != (len(arrays), horizon, 10):
+        outputs = list(self.model.predict_batch(contexts=arrays, horizon=horizon, **DECODE_SETTINGS))
+        if len(outputs) != len(arrays):
+            raise ModelIntegrityError(f"upstream returned {len(outputs)} forecasts for {len(arrays)} series")
+        point = np.asarray(np.stack([np.asarray(o.forecast, dtype=float) for o in outputs]), dtype=float)
+        quantiles = np.asarray(np.stack([np.asarray(o.quantiles, dtype=float) for o in outputs]), dtype=float)
+        if point.shape != (len(arrays), horizon) or quantiles.shape != (len(arrays), horizon, _N_SLOTS):
             raise ModelIntegrityError(
                 f"upstream returned shapes {point.shape} / {quantiles.shape}; expected "
-                f"({len(arrays)}, {horizon}) / ({len(arrays)}, {horizon}, 10)"
+                f"({len(arrays)}, {horizon}) / ({len(arrays)}, {horizon}, {_N_SLOTS})"
             )
         if not (np.isfinite(point).all() and np.isfinite(quantiles).all()):
             raise ModelIntegrityError("upstream returned a non-finite forecast value")
@@ -348,27 +392,44 @@ def load_pinned_model(
     weights_dir: str | os.PathLike[str] | None = None,
     *,
     device: str = "auto",
-    torch_compile: bool = False,
 ) -> LoadedModel:
-    """Verify the staged snapshot, then load it through the pinned ``timesfm`` package.
+    """Verify the staged snapshot, then load it through ``timesfm3.TimesFM3Forecaster``.
 
-    The loader never consults the Hub for the identity: the committed manifest is the anchor.
-    ``torch_compile`` is off by default because it adds a long first-call compile on CPU
-    runtimes and changes nothing in the forecast values the tutorial reports.
+    The loader never consults the Hub for the identity: the committed manifest is the anchor. The
+    forecaster is given the snapshot *directory*, so it builds the model from the staged
+    ``config.json`` (the same path upstream's ``from_pretrained`` takes) rather than from the
+    package's built-in defaults, and ``local_files_only=True`` forbids any download at load time.
     """
     root = Path(weights_dir) if weights_dir is not None else DEFAULT_WEIGHTS_DIR
     snapshot = verify_snapshot(root)
-    import timesfm
     import torch
+    from timesfm3 import TimesFM3Forecaster
 
     resolved_device = resolve_device(device)
-    model = timesfm.TimesFM_2p5_200M_torch(torch_compile=torch_compile)
     if resolved_device.startswith("cuda") and not torch.cuda.is_available():
         raise RuntimeError("device='cuda' requested but CUDA is not available")
-    model.load_checkpoint(str(root / WEIGHTS_FILENAME))
-    if not resolved_device.startswith("cuda"):
-        model.model.to("cpu")
-        model.model.device = torch.device("cpu")
+    model = TimesFM3Forecaster(
+        checkpoint_path=str(root),
+        device=resolved_device,
+        local_files_only=True,
+        per_core_batch_size=DECODE_SETTINGS["per_core_batch_size"],
+    )
+    forecaster_config = getattr(model, "config", None)
+    if forecaster_config is not None:
+        observed = {
+            "input_patch_length": getattr(forecaster_config, "input_patch_length", None),
+            "output_patch_length": getattr(forecaster_config, "output_patch_length", None),
+            "quantiles": list(getattr(forecaster_config, "quantiles", []) or []),
+            "median_quantile_index": getattr(forecaster_config, "median_quantile_index", None),
+        }
+        expected = {
+            "input_patch_length": _INPUT_PATCH,
+            "output_patch_length": _OUTPUT_PATCH,
+            "quantiles": list(TRAINED_QUANTILES),
+            "median_quantile_index": MEDIAN_SLOT,
+        }
+        if observed != expected:
+            raise ModelIntegrityError(f"the loaded forecaster reports {observed}, not the pinned {expected}")
     param = next(model.model.parameters())
     weight_entry = next(f for f in snapshot["files"] if f["path"] == WEIGHTS_FILENAME)
     identity = {
@@ -377,6 +438,8 @@ def load_pinned_model(
         "revision_status": MODEL_REVISION_STATUS,
         "resolved_revision": snapshot.get("resolved_revision"),
         "license": MODEL_LICENSE,
+        "license_terms": MODEL_LICENSE_TERMS,
+        "license_url": MODEL_LICENSE_URL,
         "license_source": MODEL_LICENSE_SOURCE,
         "source_url": MODEL_URL,
         "weights_file": WEIGHTS_FILENAME,
@@ -385,6 +448,7 @@ def load_pinned_model(
         "weights_sha256_verified_against_manifest": weight_entry["verified"],
         "config_sha256": PINNED_CONFIG_SHA256,
         "trained_quantiles": list(TRAINED_QUANTILES),
+        "median_quantile_index": MEDIAN_SLOT,
         "parameters": int(sum(p.numel() for p in model.model.parameters())),
     }
     return LoadedModel(

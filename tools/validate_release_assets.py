@@ -24,15 +24,16 @@ REPO_NAME = "timesfm-forecasting-pipeline"
 NOTEBOOK_NAME = "timesfm_forecasting_colab.ipynb"
 EXPECTED_PROFILE = "TASK-INFERENCE"
 EXPECTED_MODE = "GUIDED"
-EXPECTED_MODEL_ID = "google/timesfm-2.5-200m-pytorch"
+EXPECTED_MODEL_ID = "google/timesfm-3.0-pytorch"
 MODEL_LOAD_EXPR = "load_pinned_model(weights_dir=WEIGHTS_DIR)"
 NOTEBOOK_SPEC = "2.2"
 GENERATOR_SPEC = "2.0"  # the vendored generator's metadata value (its NOTEBOOK_SPEC constant)
 STATUS_TOKENS = ("Candidate", "Release-grade")
 PLACEHOLDER = re.compile(r"\b(TODO|TBD|FIXME)\b|# WRITE ME|Insert text here|Tooltip:", re.I)
 SHA40 = re.compile(r"\b[0-9a-f]{40}\b")
-# 40-hex strings a document may legitimately contain: the pinned sample's source commit.
-KNOWN_SHAS = frozenset({"81ab292253c75531a9192fd22c44d8083633d5a8"})
+# 40-hex strings a document may legitimately contain: the commit of this repository the pinned sample URL names
+# (also the TimesFM 2.5 Apache-2.0 build the README names as the fallback).
+KNOWN_SHAS = frozenset({"e47259ae75b93e7611c67e13a14d6607997c38f3"})
 UNSUPPORTED_CLAIMS = re.compile(
     r"\b(production[- ]ready|battle[- ]tested|state[- ]of[- ]the[- ]art results (were|are) reproduced"
     r"|benchmark superiority (is|was) (shown|established)|is release-grade|now release-grade)\b",
@@ -87,6 +88,7 @@ MARKDOWN_MARKERS = (
     "**Infrastructure.**",
     "**The point forecast is the median, and the band is a model statement.**",
     "**Zero-shot does not mean untrained.**",
+    "**Weights licence.**",
     "verdicts are recorded, not asserted",
     "not a benchmark",
     "**AI Assistance Disclosure:**",
@@ -100,7 +102,9 @@ FORBIDDEN_OUTSIDE_MODULE = (
     "snapshot_download(",
     "import timesfm",
     "from timesfm",
-    "TimesFM_2p5",
+    "TimesFM3Forecaster(",
+    "TimesFM3Torch",
+    "from_pretrained(",
     "from safetensors",
     "torch.load(",
     "pickle.load",
@@ -192,7 +196,8 @@ def validate_model_card() -> None:
             _check(words >= 40, f"MODEL_CARD.md: section {name!r} has {words} words (<40, G13)")
             _check(not re.fullmatch(r"\s*(N/A|None|Not applicable)\.?\s*", m.group(1), re.I), f"MODEL_CARD.md: section {name!r} answered with a bare N/A (G10)")
     _check(not UNSUPPORTED_CLAIMS.search(text), "MODEL_CARD.md: unsupported readiness/benchmark claim")
-    _check("non-commercial" in text, "MODEL_CARD.md: must record the TimesFM 3.0 non-commercial restriction it avoids (LIC5)")
+    _check("non-commercial" in text and "non-production" in text, "MODEL_CARD.md: must state the TimesFM 3.0 weights licence restriction (non-commercial, non-production) (LIC5)")
+    _check("timesfm-non-commercial-license-v1.0" in text, "MODEL_CARD.md: must name the weights licence timesfm-non-commercial-license-v1.0")
     _check("to be confirmed on the first hosted run" in text, "MODEL_CARD.md: must state the pending revision/digest status")
 
 
@@ -324,7 +329,9 @@ def validate_notebook() -> None:
         _check(out in all_code, f"notebook: expected output path missing: {out!r}")
     _check(not PLACEHOLDER.search(all_md + all_code), "notebook: placeholder marker survives (SRC3)")
     _check("warnings.filterwarnings('ignore')" not in all_code and 'warnings.filterwarnings("ignore")' not in all_code, "notebook: global warning suppression (SRC11)")
-    _check("github.com/kurtvalcorza" not in all_code.replace("https://raw.githubusercontent.com/kurtvalcorza/chronos-2-forecasting-pipeline", ""), "notebook: repository source fetched at runtime (ST3/ST4)")
+    sample_url = _load_tool("notebook_template").SAMPLE_URL
+    _check("github.com/kurtvalcorza" not in all_code.replace(sample_url, ""), "notebook: repository source fetched at runtime (ST3/ST4)")
+    _check("non-commercial" in all_md and "non-production" in all_md, "notebook: must state the weights licence restriction before the download cell")
     # The generating repository commit (NOTEBOOK_SOURCE.repository_revision) is the only other 40-hex value allowed.
     stray = set(SHA40.findall(all_code + all_md)) - KNOWN_SHAS - {str(meta.get("generated_from", {}).get("revision"))}
     _check(not stray, f"notebook: unexpected 40-hex revision(s) {sorted(stray)}")

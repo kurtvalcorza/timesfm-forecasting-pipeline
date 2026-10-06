@@ -13,25 +13,29 @@ from typing import Any, Literal
 __all__ = [
     "ForecastConfig",
     "TRAINED_QUANTILES",
+    "MEDIAN_SLOT",
     "MAX_HORIZON",
     "MAX_CONTEXT_POINTS",
     "MIN_CONTEXT_POINTS",
     "DEFAULT_QUANTILE_LEVELS",
 ]
 
-#: The nine deciles TimesFM 2.5 was trained to emit (``config.json`` ``quantiles``). Index 0 of
-#: the model's quantile array is a separate mean head; it is exported as ``mean``, never as a
-#: quantile. Any other level is refused rather than interpolated.
+#: The nine deciles TimesFM 3.0 was trained to emit (``config.json`` ``quantiles``). The model's
+#: quantile array has exactly these nine slots, in this order; slot ``MEDIAN_SLOT`` (index 4) is the
+#: median and is the point forecast. There is no separate mean head. Any other level is refused
+#: rather than interpolated.
 TRAINED_QUANTILES: tuple[float, ...] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+MEDIAN_SLOT = TRAINED_QUANTILES.index(0.5)
 DEFAULT_QUANTILE_LEVELS: tuple[float, ...] = (0.1, 0.5, 0.9)
 
-#: Longest forecast one request may ask for. TimesFM 2.5's continuous quantile head supports up
-#: to 1,024 steps; the pipeline keeps a lower ceiling so a tutorial request stays cheap and the
-#: horizon never dominates the 16,384-point context limit (``max_context + max_horizon``).
+#: Longest forecast one request may ask for. TimesFM 3.0 decodes the horizon autoregressively in
+#: 64-point output patches with no fixed upper bound; the pipeline keeps a ceiling so a tutorial
+#: request stays cheap and a horizon far beyond the context's cycle is never silently accepted.
 MAX_HORIZON = 512
-#: TimesFM 2.5 context limit (``TimesFM_2p5_200M_Definition.context_limit``). Longer histories are
-#: truncated to their most recent points and the truncation is reported, never silent.
-MAX_CONTEXT_POINTS = 16_384
+#: TimesFM 3.0 context limit (``timesfm3`` ``_MAX_CONTEXT_LENGTH = 15360``; the forecaster truncates
+#: longer contexts to their most recent points). Longer histories are truncated here first and the
+#: truncation is reported, never silent.
+MAX_CONTEXT_POINTS = 15_360
 #: Fewest history points the pipeline will pass to the model per series. The model pads shorter
 #: inputs with zeros; below this many real points the forecast is dominated by padding.
 MIN_CONTEXT_POINTS = 16

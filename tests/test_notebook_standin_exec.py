@@ -36,7 +36,7 @@ def workdir(tmp_path: Path) -> Path:
     work = tmp_path / "work"
     (work / "data").mkdir(parents=True)
     shutil.copy(SAMPLE, work / "data" / SAMPLE.name)  # the cell's digest check accepts the cached copy; no network
-    stage_standin_weights(work / "weights" / "timesfm-2.5-200m-pytorch")
+    stage_standin_weights(work / "weights" / "timesfm-3.0-pytorch")
     return work
 
 
@@ -62,15 +62,17 @@ def test_notebook_cells_run_end_to_end_against_standins(workdir: Path, monkeypat
     assert result["evaluation_report"]["verdict"] == "sample-sanity"
     assert {r["method"] for r in result["evaluation_report"]["table"]} == {"timesfm", "naive", "seasonal_naive", "ses"}
     assert result["activity"]["changed"] == "context_length" and result["activity"]["values"] == [312, 48]
-    assert result["model"]["model_id"] == "google/timesfm-2.5-200m-pytorch"
+    assert result["model"]["model_id"] == "google/timesfm-3.0-pytorch"
+    assert result["model"]["license"] == "timesfm-non-commercial-license-v1.0"
+    assert "non-production" in result["model"]["license_terms"]
     assert result["model"]["weights_sha256_verified_against_manifest"] is False  # pending, honestly reported
     assert result["provenance_summary"]["runtime"]["torch"] is None  # stand-in: torch is not an installed distribution
     forecast = pd.read_csv(outputs / "timesfm_forecasting_forecast.csv")
-    assert list(forecast.columns) == ["series_id", "timestamp", "step", "prediction", "mean", "q0.1", "q0.5", "q0.9"]
+    assert list(forecast.columns) == ["series_id", "timestamp", "step", "prediction", "q0.1", "q0.5", "q0.9"]
     assert len(forecast) == 72 and (forecast["prediction"] == forecast["q0.5"]).all()
     future = pd.read_csv(outputs / "timesfm_forecasting_future_forecast.csv")
     assert future["timestamp"].min() == "2026-09-09 00:00:00"
     manifest = json.loads((outputs / "timesfm_forecasting_input_manifest.json").read_text(encoding="utf-8"))
     assert manifest["frequency"]["alias"] == "h" and manifest["n_series"] == 3 and manifest["changes"] == []
-    assert (workdir / "weights" / "timesfm-2.5-200m-pytorch" / "config.json").is_file()
-    assert not (workdir / "weights" / "timesfm-2.5-200m-pytorch" / "resolved-revision.json").exists()  # nothing fetched
+    assert (workdir / "weights" / "timesfm-3.0-pytorch" / "config.json").is_file()
+    assert not (workdir / "weights" / "timesfm-3.0-pytorch" / "resolved-revision.json").exists()  # nothing fetched

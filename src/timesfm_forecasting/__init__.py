@@ -1,11 +1,11 @@
-"""Zero-shot time-series forecasting with a pinned Google TimesFM 2.5 checkpoint.
+"""Zero-shot time-series forecasting with a pinned Google TimesFM 3.0 checkpoint.
 
 Modules (carried verbatim into the standalone tutorial notebook, in this dependency order):
 
 - ``errors``: machine-readable refusal codes;
 - ``config``: ``ForecastConfig`` and the named ceilings;
 - ``data``: CSV loading, frequency inference, gap/NaN policies, length rules, input manifest;
-- ``model``: pinned identity, staging, integrity verification, lazy loading through ``timesfm``;
+- ``model``: pinned identity, staging, integrity verification, lazy loading through ``timesfm3``;
 - ``forecasting``: point (median) and quantile forecast over a validated table;
 - ``evaluation``: chronological holdout, naive / seasonal-naive / SES baselines, MASE, sMAPE,
   quantile loss, recorded verdicts;
@@ -18,6 +18,7 @@ from .config import (
     DEFAULT_QUANTILE_LEVELS,
     MAX_CONTEXT_POINTS,
     MAX_HORIZON,
+    MEDIAN_SLOT,
     MIN_CONTEXT_POINTS,
     TRAINED_QUANTILES,
     ForecastConfig,
@@ -65,6 +66,7 @@ from .model import (
     MODEL_ID,
     MODEL_KEY,
     MODEL_LICENSE,
+    MODEL_LICENSE_TERMS,
     MODEL_REVISION,
     MODEL_REVISION_STATUS,
     LoadedModel,
@@ -89,6 +91,7 @@ __all__ = [
     "ForecastConfig",
     "DEFAULT_QUANTILE_LEVELS",
     "TRAINED_QUANTILES",
+    "MEDIAN_SLOT",
     "MAX_HORIZON",
     "MAX_CONTEXT_POINTS",
     "MIN_CONTEXT_POINTS",
@@ -129,6 +132,7 @@ __all__ = [
     "MODEL_REVISION",
     "MODEL_REVISION_STATUS",
     "MODEL_LICENSE",
+    "MODEL_LICENSE_TERMS",
     "MODEL_KEY",
     "MANIFEST_NAME",
     "DEFAULT_WEIGHTS_DIR",

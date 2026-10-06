@@ -23,6 +23,11 @@ Repository-local addition (timesfm-forecasting-pipeline, 2026-10-05): the opt-in
 immutable commit and quote the sentence, instead of calling the ref "immutable"; nothing else changes. It exists
 because the Hub was unreachable when the pin was written (MOD2 deviation, recorded in STATUS.md and MODEL_CARD.md).
 
+Repository-local addition (timesfm-forecasting-pipeline, 2026-10-06): the opt-in template key ``weights_licence_note``
+(a markdown paragraph). When set, it is inserted into the Section 3 markdown immediately before the cell that
+downloads the weights, so a reader sees the weights' licence terms before the download runs. It exists because the
+TimesFM 3.0 weights are distributed under a non-commercial, non-production licence (LIC5).
+
 Usage (from the repository root, or with --repo):
     python tools/build_notebook.py            # write tutorials/<notebook_name>
     python tools/build_notebook.py --check    # exit 1 if the committed notebook differs (PAR3)
@@ -471,6 +476,7 @@ def template_contract() -> dict[str, str]:
         "infrastructure_labels": "OPTIONAL bool (default False): label the setup, carrier and snapshot sections Infrastructure and collapse their cells (NOTEBOOK_SPEC 2.2 GDL11)",
         "guided": "OPTIONAL {'opening': [markdown cells inserted after the header]} (NOTEBOOK_SPEC 2.2 GDL1-GDL4)",
         "revision_pending": "OPTIONAL sentence: the model ref is not yet an immutable commit (repository-local addition; see the module docstring)",
+        "weights_licence_note": "OPTIONAL markdown paragraph stating the weights' licence terms, placed before the download cell in Section 3 (repository-local addition; see the module docstring)",
         "external_access": "OPTIONAL replacement for the text of the generated External access bullet, for a default path that also reaches hosts other than the model host; may use {MODEL_ID}, {MODEL_REVISION}, {total_mb:.0f}",
     }
 
@@ -1021,6 +1027,7 @@ def render(repo: Path, template: dict[str, Any], revision: str | None = None) ->
             + ", `verify_snapshot` re-hashes every file and raises on the first size or digest mismatch, "
             f"and only then does `{load_expr}` load the verified files. There is no fallback to a different download and no remote model code is "
             f"executed.{extra_note} The effective identity, device and weight source are printed before any inference."
+            + (f"\n\n{template['weights_licence_note'].strip()}" if (template.get("weights_licence_note") or "").strip() else "")
         )
     )
     ie = ctx["ident_expr"]

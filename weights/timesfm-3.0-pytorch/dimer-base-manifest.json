@@ -1,0 +1,45 @@
+{
+  "format": "dimer_hf_snapshot",
+  "formatVersion": 1,
+  "modelKey": "timesfm-3.0-pytorch",
+  "modelId": "google/timesfm-3.0-pytorch",
+  "revision": "main",
+  "revisionStatus": "unresolved: revision digest to be confirmed on the first hosted run",
+  "license": {
+    "hub_front_matter": "license: other; license_name: timesfm-non-commercial-license-v1.0; license_link: LICENSE",
+    "name": "TimesFM Non-Commercial License v1.0",
+    "terms": "non-commercial and non-production use only; no distribution of the model or of derivatives; a commercial licence from Google LLC is required for any other use",
+    "file": "LICENSE",
+    "fileBytes": 7270,
+    "url": "https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE"
+  },
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 1273,
+      "sha256": "ff17bbc07b792c5a904cca265b8468579d736a4fe84981da25eb871b0a125bc6"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 1322898824,
+      "sha256": "pending: to be confirmed on the first hosted run",
+      "status": "not a digest: the SHA-256 is to be confirmed on the first hosted run; byte size verified against the Hub listing"
+    }
+  ],
+  "totalBytes": 1322900097,
+  "verification": {
+    "date": "2026-10-06",
+    "method": "Hub file listing (ls/stat) and file contents (README.md, config.json, LICENSE) read through the Hugging Face connector; the Hub's commit API and LFS metadata were not reachable from the build environment, so no commit SHA and no LFS digest could be resolved",
+    "verified": [
+      "file names and byte sizes of the checkpoint repository: .gitattributes (1519), LICENSE (7270), README.md (1436), config.json (1273), model.safetensors (1322898824, LFS)",
+      "config.json SHA-256 computed from its full Hub-served text (1273 bytes, no trailing newline; the byte count equals the listing)",
+      "model card front matter license: other, license_name: timesfm-non-commercial-license-v1.0, license_link: LICENSE; the LICENSE text was read in full",
+      "architecture from config.json: input_patch_len 32, output_patch_len 64, nine quantiles 0.1..0.9, 20 transformer layers, model_dims 1280, 16 heads, variate attention, iterative CPM RevIN, linear detrending, stitching",
+      "Hub overview: 330.7M parameters, last updated 2026-09-02"
+    ],
+    "pending": [
+      "immutable commit SHA of the checkpoint (MODEL_REVISION, manifest.revision)",
+      "model.safetensors SHA-256"
+    ]
+  }
+}

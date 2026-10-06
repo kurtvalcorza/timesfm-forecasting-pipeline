@@ -86,8 +86,8 @@ jobs:
       - name: Cache the staged snapshot
         uses: actions/cache@v4
         with:
-          path: weights/timesfm-2.5-200m-pytorch
-          key: hf-google-timesfm-2.5-200m-pytorch-${{ hashFiles('weights/timesfm-2.5-200m-pytorch/dimer-base-manifest.json') }}
+          path: weights/timesfm-3.0-pytorch
+          key: hf-google-timesfm-3.0-pytorch-${{ hashFiles('weights/timesfm-3.0-pytorch/dimer-base-manifest.json') }}
 
       - name: Integration tests (CPU, real weights)
         run: uv run pytest -m integration
@@ -103,7 +103,7 @@ jobs:
           uv run python tools/run_notebook.py tutorials/timesfm_forecasting_colab.ipynb --workdir "${RUNNER_TEMP}/timesfm-notebook-fresh"
           mkdir -p outputs/default
           cp -r "${RUNNER_TEMP}/timesfm-notebook-fresh/outputs/." outputs/default/
-          cp "${RUNNER_TEMP}/timesfm-notebook-fresh/weights/timesfm-2.5-200m-pytorch/resolved-revision.json" outputs/default/ || true
+          cp "${RUNNER_TEMP}/timesfm-notebook-fresh/weights/timesfm-3.0-pytorch/resolved-revision.json" outputs/default/ || true
 
       - name: Upload tutorial evidence
         uses: actions/upload-artifact@v4

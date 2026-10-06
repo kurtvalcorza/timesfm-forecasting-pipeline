@@ -2,8 +2,9 @@
 
 ``forecast`` takes a :class:`ValidationResult`, passes each series' most recent
 ``context_length`` points to the model, and returns one tidy row per ``(series_id, step)`` with
-the future timestamp, the median point forecast, the mean head and the requested quantiles.
-The row layout is asserted against the model's output shape so a forecast can never be
+the future timestamp, the median point forecast and the requested quantiles. TimesFM 3.0 emits
+nine quantile slots (the deciles 0.1 .. 0.9) and no mean head; the point forecast is slot 4, the
+median. The row layout is asserted against the model's output shape so a forecast can never be
 attached to the wrong series or step.
 """
 
@@ -15,14 +16,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .config import TRAINED_QUANTILES, ForecastConfig
+from .config import MEDIAN_SLOT, TRAINED_QUANTILES, ForecastConfig
 from .data import ID_COLUMN, TIMESTAMP_COLUMN, VALUE_COLUMN, ValidationResult, future_timestamps
 from .errors import ModelIntegrityError
 
-__all__ = ["ForecastResult", "forecast", "quantile_column", "POINT_COLUMN", "MEAN_COLUMN", "STEP_COLUMN"]
+__all__ = ["ForecastResult", "forecast", "quantile_column", "POINT_COLUMN", "STEP_COLUMN"]
 
 POINT_COLUMN = "prediction"
-MEAN_COLUMN = "mean"
 STEP_COLUMN = "step"
 
 
@@ -60,10 +60,10 @@ def forecast(validation: ValidationResult, config: ForecastConfig, model: Any) -
     point, quantiles = model.predict(inputs, config.horizon, config)
     if point.shape != (len(ids), config.horizon) or quantiles.shape[:2] != (len(ids), config.horizon):
         raise ModelIntegrityError(f"model returned {point.shape} / {quantiles.shape} for {len(ids)} series")
-    if quantiles.shape[2] != len(TRAINED_QUANTILES) + 1:
-        raise ModelIntegrityError(f"expected {len(TRAINED_QUANTILES) + 1} quantile slots, got {quantiles.shape[2]}")
-    # Row-layout oracle: the point forecast must equal the median slot for every series/step.
-    if not np.allclose(point, quantiles[:, :, 5], rtol=0, atol=1e-6):
+    if quantiles.shape[2] != len(TRAINED_QUANTILES):
+        raise ModelIntegrityError(f"expected {len(TRAINED_QUANTILES)} quantile slots, got {quantiles.shape[2]}")
+    # Row-layout oracle: the point forecast must equal the median slot (index 4) for every series/step.
+    if not np.allclose(point, quantiles[:, :, MEDIAN_SLOT], rtol=0, atol=1e-6):
         raise ModelIntegrityError("point forecast is not the median slot; the upstream contract changed")
     rows = []
     for i, series_id in enumerate(ids):
@@ -75,23 +75,24 @@ def forecast(validation: ValidationResult, config: ForecastConfig, model: Any) -
                 TIMESTAMP_COLUMN: stamps[step],
                 STEP_COLUMN: step + 1,
                 POINT_COLUMN: float(point[i, step]),
-                MEAN_COLUMN: float(quantiles[i, step, 0]),
             }
             for level in config.quantile_levels:
-                slot = 1 + int(round(level * 10)) - 1
+                slot = int(round(level * 10)) - 1  # 0.1 -> slot 0 ... 0.9 -> slot 8
                 row[quantile_column(level)] = float(quantiles[i, step, slot])
             rows.append(row)
     out = pd.DataFrame(rows)
     provenance = {
         "task": "zero-shot time-series forecasting",
-        "point_forecast_semantics": "median (model quantile 0.5); `mean` is the separate mean head",
-        "quantile_semantics": "model quantiles from the trained decile grid; not calibrated intervals",
+        "point_forecast_semantics": "median (model quantile 0.5, slot 4 of the nine quantile slots); no mean head",
+        "quantile_semantics": (
+            "model quantiles from the trained decile grid, sorted monotone upstream; not calibrated intervals"
+        ),
         "horizon": config.horizon,
         "requested_context_length": config.context_length,
         "effective_context_length": effective_context,
         "quantile_levels": list(config.quantile_levels),
         "n_series": len(ids),
         "frequency": validation.frequency.to_dict(),
-        "compiled": model.compile_for(config) if hasattr(model, "compile_for") else None,
+        "decode_settings": model.decode_settings(config) if hasattr(model, "decode_settings") else None,
     }
     return ForecastResult(forecast=out, provenance=provenance)
