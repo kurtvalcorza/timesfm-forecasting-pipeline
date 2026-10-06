@@ -74,4 +74,6 @@ Before changing the status from `Candidate` to `Release-grade`:
 | Date | Notebook revision (commit / blob) | Runtime | Procedure | Observed result | Caveats |
 |---|---|---|---|---|---|
 
-_No execution recorded yet. The table is filled only from hosted runs of the exact candidate revision._
+| 2026-10-06 | `c7bf4a6` / `45b62c0c` | Google Colab, CUDA (`cuda:0`), isolated env Python 3.12.12 built in 64 s (kernel 3.13.15) | maintainer Run all on a fresh runtime | **FAILED** at code cell 15 (Section 7, first forecast): `TypeError: TimesFM3Forecaster.predict_batch() got an unexpected keyword argument 'per_core_batch_size'`. Cells 1–14 completed: isolated env, snapshot staged (2 files, 1,322,900,097 bytes) and size-verified, model loaded on CUDA, sample fetched and digest-verified (SHA-256 `74163ee6…`), validation and split passed | Fixed in the next commit (the batch size moves to the constructor); evidence copy `docs/execution-evidence/2026-10-06/timesfm_forecasting_colab_c7bf4a6_run1_failed.ipynb`. Not promotion evidence |
+
+Saved outputs were inspected; execution was not independently repeated. Source identity: every cell's source equals the `c7bf4a6` notebook (no `# @param` or `# @title` differences).
