@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
+  MPLBACKEND: Agg
+
+jobs:
+  lint-and-unit:
+    name: Lint and contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      # The core package and every test need only numpy, pandas and the dev extra (pytest, ruff, nbformat,
+      # matplotlib). PyTorch and timesfm are the `model` extra and are NOT installed here: the tests that need
+      # them skip, and the notebook stand-in test runs the notebook's own cells against stub modules.
+      - name: Install the locked environment (no model stack)
+        run: uv sync --locked --extra dev
+
+      - name: Ruff
+        run: uv run ruff check src tests tools
+
+      - name: Contract and unit tests
+        run: uv run pytest -m "not integration"
+
+      - name: Validate tutorial and model-card source
+        run: uv run python tools/validate_release_assets.py
+
+      - name: Standalone notebook parity (NOTEBOOK_SPEC 2.2 PAR3)
+        run: uv run python tools/build_notebook.py --check
+
+      - name: Lock resolves (dry run, hashes required, wheels only)
+        # Quoted: the `:all:` token followed by a space is a YAML mapping separator in a plain scalar.
+        run: "uv pip install --dry-run --python 3.12 --python-platform x86_64-manylinux_2_28 --require-hashes --only-binary :all: -r tutorials/requirements-colab.lock.txt"
+
+  release-evidence-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Explain evidence boundary
+        run: |
+          echo "Static/unit CI is not clean-runtime notebook execution evidence."
+          echo "See docs/release-verification.md before promoting the tutorial to release-grade."
+
+  integration:
+    # Real pinned weights on CPU. Manual only until the first hosted run has pinned the immutable commit and the
+    # weight digest (docs/release-verification.md); it installs the `model` extra, which the other jobs do not.
+    name: CPU integration against the pinned weights (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install the locked environment with the model stack
+        run: uv sync --locked --extra dev --extra model
+
+      - name: Cache the staged snapshot
+        uses: actions/cache@v4
+        with:
+          path: weights/timesfm-3.0-pytorch
+          key: hf-google-timesfm-3.0-pytorch-${{ hashFiles('weights/timesfm-3.0-pytorch/dimer-base-manifest.json') }}
+
+      - name: Integration tests (CPU, real weights)
+        run: uv run pytest -m integration
+
+      # The notebook is standalone; DIMER_NOTEBOOK_CI_PREINSTALLED=1 runs every cell in this environment instead of
+      # building the isolated one. A pre-flight on the locked stack, not clean-runtime evidence.
+      - name: Execute the tutorial cells from a clean working directory
+        env:
+          DIMER_NOTEBOOK_CI_PREINSTALLED: "1"
+        run: |
+          rm -rf "${RUNNER_TEMP}/timesfm-notebook-fresh"
+          mkdir -p "${RUNNER_TEMP}/timesfm-notebook-fresh"
+          uv run python tools/run_notebook.py tutorials/timesfm_forecasting_colab.ipynb --workdir "${RUNNER_TEMP}/timesfm-notebook-fresh"
+          mkdir -p outputs/default
+          cp -r "${RUNNER_TEMP}/timesfm-notebook-fresh/outputs/." outputs/default/
+          cp "${RUNNER_TEMP}/timesfm-notebook-fresh/weights/timesfm-3.0-pytorch/resolved-revision.json" outputs/default/ || true
+
+      - name: Upload tutorial evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: timesfm-live-tutorial-${{ github.sha }}
+          path: outputs/
+          if-no-files-found: error

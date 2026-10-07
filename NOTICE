@@ -1,0 +1,25 @@
+timesfm-forecasting-pipeline
+Copyright 2026 Kurt Valcorza
+
+This product includes software developed as part of the DIMER pipeline fleet.
+Pipeline code, tests, tooling, the generated notebook and documentation:
+Apache License 2.0 (see LICENSE).
+
+Third-party components this repository references but does not redistribute:
+
+- TimesFM inference code (google-research/timesfm, PyPI `timesfm` 3.0.2, the
+  `timesfm3` package): Apache License 2.0, Copyright 2026 Google LLC.
+- TimesFM 3.0 PyTorch checkpoint (google/timesfm-3.0-pytorch on the Hugging
+  Face Hub): **TimesFM Non-Commercial License v1.0** (Hub front matter
+  `license: other`, `license_name: timesfm-non-commercial-license-v1.0`). The
+  weights are licensed by Google LLC for NON-COMMERCIAL AND NON-PRODUCTION USE
+  ONLY: testing, evaluation and research not tied to commercial gain,
+  production deployment or revenue generation; no use in end-user-facing or
+  production systems; no redistribution of the model or of derivatives; a
+  commercial licence from Google LLC is required for any other use. The
+  Apache-2.0 licence of this repository does NOT extend to the weights. They
+  are downloaded at run time by the user, who accepts those terms, and are
+  never committed here. Licence text:
+  https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE
+- Open-Meteo hourly temperature sample (examples/sample-data/): Creative Commons
+  Attribution 4.0 International (CC BY 4.0). Weather data by Open-Meteo.com.

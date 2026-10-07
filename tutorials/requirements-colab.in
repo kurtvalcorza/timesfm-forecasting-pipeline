@@ -1,0 +1,12 @@
+# Runtime pins carried inline by the standalone notebook (tools/build_notebook.py `pins_file`) and the
+# input of tutorials/requirements-colab.lock.txt:
+#   uv pip compile tutorials/requirements-colab.in --python-version 3.12 --python-platform x86_64-manylinux_2_28 \
+#       --generate-hashes --only-binary :all: -o tutorials/requirements-colab.lock.txt
+# The versions equal pyproject.toml's `dependencies` + `model` + the matplotlib dev pin (tests enforce this).
+timesfm==3.0.2
+torch==2.14.0
+numpy==2.5.3
+pandas==3.0.5
+huggingface-hub==0.36.2
+safetensors==0.8.0
+matplotlib==3.10.8
