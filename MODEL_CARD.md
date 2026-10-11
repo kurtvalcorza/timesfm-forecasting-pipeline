@@ -150,7 +150,7 @@ Distinct from the boundaries above, the developers consider the following uses p
 
 ## Verification records
 
-Two maintainer runs on Google Colab are recorded in `docs/release-verification.md` (2026-10-06). The first (`c7bf4a6`) failed at the first forecast and is not evidence of anything beyond the staging and loading cells. The second is recorded here; `clean_runtime_evidence` stays `false` because BYOD, an export-cell re-run and a repeated Run all were not exercised.
+Three hosted runs on Google Colab are recorded in `docs/release-verification.md`. The first (`c7bf4a6`, 2026-10-06) failed at the first forecast and is not evidence of anything beyond the staging and loading cells. The second (`86f2213`, 2026-10-06) and the third (`63edcb1`, 2026-10-11, the pinned head) are recorded here; `clean_runtime_evidence` stays `false` because BYOD, an export-cell re-run and a repeated Run all were not exercised.
 
 - **Date:** 2026-10-06
 - **Subject:** `tutorials/timesfm_forecasting_colab.ipynb` at repository commit `86f2213` (notebook blob `c6a9263a`), **default path** (`USE_BYOD = False`, every form field at its default)
@@ -158,6 +158,13 @@ Two maintainer runs on Google Colab are recorded in `docs/release-verification.m
 - **Procedure:** maintainer **Run all** on a fresh runtime, one pass; the executed notebook is kept as `docs/execution-evidence/2026-10-06/timesfm_forecasting_colab_86f2213_run2_passed.ipynb`
 - **Observed result:** 19/19 code cells, no errors. The Hub served commit `43046b85ec22d584a13f8098c2ed39c889e129c2` for ref `main` (`resolved_revision`), and `verify_snapshot` computed `model.safetensors` SHA-256 `a7592b0a8432baee54483254e5647856911ce69e09d09a9bb65904b2d98f17da` over the 1,322,898,824-byte staged file. Held-out 24 h × 3 series: TimesFM MASE 0.6943 / sMAPE 1.698 against seasonal-naive 0.7417 / 1.837, naive 3.2201, SES 3.2398; q0.1–q0.9 coverage 0.764 (nominal 0.8); reload parity ok
 - **Caveats:** at that commit `MODEL_REVISION` was still the ref `main` and the manifest held a pending sentinel, so the run reported `weights_sha256_verified_against_manifest: False`; the commit and the digest it observed are now pinned in `model.py` and the manifest, which means **the run predates the pin** and the next hosted run on the pinned head is the one that re-verifies the pinned digest and commit. One seeded holdout, not a benchmark; BYOD (REL12), an export-cell re-run and a repeated Run all were not exercised
+
+- **Date:** 2026-10-11
+- **Subject:** `tutorials/timesfm_forecasting_colab.ipynb` at repository commit `63edcb1` (notebook blob `c5075527`), **default path**, the first hosted run of the pinned head
+- **Runtime:** Colab CLI 0.7.4 sequential execution on a fresh Colab Tesla T4, CUDA (`cuda:0`), isolated environment Python `3.12.12`, `torch 2.14.0`, `timesfm 3.0.2`
+- **Procedure:** every code cell executed in order in one kernel (not a browser Run all; order from the CLI log); the executed notebook is kept as `docs/execution-evidence/2026-10-11/timesfm_forecasting_colab_63edcb1_run3_passed.ipynb`
+- **Observed result:** 19/19 code cells, no errors. Revision `43046b85ec22d584a13f8098c2ed39c889e129c2` requested and served; `model.safetensors` SHA-256 `a7592b0a8432baee54483254e5647856911ce69e09d09a9bb65904b2d98f17da` with `weights_sha256_verified_against_manifest: True`. Forecasts and metrics identical to the `86f2213` run: TimesFM MASE 0.6943 / sMAPE 1.698 / MAE 0.4636 against seasonal-naive 0.7417; coverage 0.764; reload parity ok
+- **Caveats:** one seeded holdout, not a benchmark; BYOD (REL12), an export-cell re-run and a repeated Run all were not exercised; the carried source revision label reads `fc4c39f` (generation-time HEAD)
 
 The offline checks below are static or stand-in evidence, not executions of the pretrained model:
 

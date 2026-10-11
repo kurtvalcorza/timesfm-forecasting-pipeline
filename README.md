@@ -22,12 +22,13 @@ See [MODEL_CARD.md](MODEL_CARD.md) for capabilities, limits, supply-chain pins a
 
 ## Status
 
-**Candidate** — the default path passed one maintainer Colab run (2026-10-06, `86f2213`); BYOD, an
-export re-run and a repeated Run all are still to be exercised; `clean_runtime_evidence: false`. See
+**Candidate** — the default path passed one maintainer Colab run (2026-10-06, `86f2213`) and one hosted run of the
+pinned head (2026-10-11, `63edcb1`, Colab CLI on a fresh T4); BYOD, an export re-run and a repeated Run all are
+still to be exercised; `clean_runtime_evidence: false`. See
 [STATUS.md](STATUS.md) and [docs/release-verification.md](docs/release-verification.md). The checkpoint
 is pinned by repository id, immutable commit `43046b85ec22…`, file names, byte sizes and the SHA-256 of
 `config.json` and `model.safetensors`; the commit and the weight digest are the values that run observed,
-so the run predates the pin and the next hosted run on this head re-verifies them.
+and the 2026-10-11 hosted run of the pinned head re-verified both in-run.
 
 ## Why TimesFM 3.0
 
