@@ -1,0 +1,37 @@
+{
+  "format": "dimer_hf_snapshot",
+  "formatVersion": 1,
+  "modelKey": "timesfm-3.0-pytorch",
+  "modelId": "google/timesfm-3.0-pytorch",
+  "revision": "43046b85ec22d584a13f8098c2ed39c889e129c2",
+  "revisionStatus": "pinned: the commit the Hub served for google/timesfm-3.0-pytorch at ref main on the maintainer's hosted Colab run of 2026-10-06 (resolved_revision in docs/execution-evidence/2026-10-06/timesfm_forecasting_colab_86f2213_run2_passed.ipynb)",
+  "license": {
+    "hub_front_matter": "license: other; license_name: timesfm-non-commercial-license-v1.0; license_link: LICENSE",
+    "name": "TimesFM Non-Commercial License v1.0",
+    "terms": "non-commercial and non-production use only; no distribution of the model or of derivatives; a commercial licence from Google LLC is required for any other use",
+    "file": "LICENSE",
+    "fileBytes": 7270,
+    "url": "https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE"
+  },
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 1273,
+      "sha256": "ff17bbc07b792c5a904cca265b8468579d736a4fe84981da25eb871b0a125bc6"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 1322898824,
+      "sha256": "a7592b0a8432baee54483254e5647856911ce69e09d09a9bb65904b2d98f17da"
+    }
+  ],
+  "totalBytes": 1322900097,
+  "provenance": {
+    "revision": "observed on the maintainer's hosted Colab run of 2026-10-06: the commit the Hub served for ref main (resolved_revision written by stage_missing_files to resolved-revision.json and exported in the run's provenance); evidence docs/execution-evidence/2026-10-06/timesfm_forecasting_colab_86f2213_run2_passed.ipynb, recorded in docs/release-verification.md",
+    "config.json": "SHA-256 computed from the full Hub-served text (1,273 bytes, no trailing newline; the byte count equals the Hub listing) read through the Hugging Face connector on 2026-10-06",
+    "model.safetensors": "SHA-256 computed in-run by verify_snapshot over the 1,322,898,824-byte file staged from the Hub on the maintainer's hosted Colab run of 2026-10-06 (weights_sha256 in the run's provenance; the manifest then held a pending sentinel, so the run reported it as not verified against the manifest); evidence docs/execution-evidence/2026-10-06/timesfm_forecasting_colab_86f2213_run2_passed.ipynb. Byte size verified against the Hub listing and the staged file",
+    "fileListing": "file names and byte sizes of the checkpoint repository read through the Hugging Face connector on 2026-10-06: .gitattributes (1519), LICENSE (7270), README.md (1436), config.json (1273), model.safetensors (1322898824, LFS); model card front matter license: other, license_name: timesfm-non-commercial-license-v1.0, license_link: LICENSE, the LICENSE text read in full; Hub overview 330.7M parameters, last updated 2026-09-02",
+    "architecture": "from config.json: input_patch_len 32, output_patch_len 64, nine quantiles 0.1..0.9, 20 transformer layers, model_dims 1280, 16 heads, variate attention, iterative CPM RevIN, linear detrending, stitching",
+    "reVerification": "the 86f2213 run predates this pin; the next hosted run on the pinned head re-verifies the digest through verify_snapshot's hard check and the commit through resolved-revision.json"
+  }
+}

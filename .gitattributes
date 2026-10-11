@@ -1,0 +1,14 @@
+# Normalise every text file to LF in the repository and in the working tree, so the SHA-256 values
+# asserted in tests, the manifest and the notebook lock are the same on every platform.
+* text=auto eol=lf
+
+# Files whose byte content is asserted somewhere get -text: no conversion at all.
+examples/sample-data/** -text
+weights/** -text
+tutorials/requirements-colab.lock.txt -text
+docs/execution-evidence/** -text
+
+# Binary
+*.png binary
+*.safetensors binary
+*.parquet binary
